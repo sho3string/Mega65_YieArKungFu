@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.11.2" orientation="orthogonal" renderorder="right-down" width="16" height="8" tilewidth="8" tileheight="8" infinite="0" nextlayerid="2" nextobjectid="1">
+ <tileset firstgid="1" name="16 x 16 Sprite sheet" tilewidth="8" tileheight="8" tilecount="2048" columns="32">
+  <image source="../Images/gfx2.bmp" width="256" height="512"/>
+ </tileset>
+ <layer id="1" name="Tile Layer 1" width="16" height="8">
+  <data encoding="csv">
+641,642,643,644,645,646,647,648,649,650,651,652,653,654,655,656,
+673,674,675,676,677,678,679,680,681,682,683,684,685,686,687,688,
+657,658,659,660,661,662,663,664,665,666,667,668,669,670,671,672,
+689,690,691,692,693,694,695,696,697,698,699,700,701,702,703,704,
+705,706,707,708,709,710,711,712,713,714,715,716,717,718,719,720,
+737,738,739,740,741,742,743,744,745,746,747,748,749,750,751,752,
+721,722,723,724,725,726,727,728,729,730,731,732,733,734,735,736,
+753,754,755,756,757,758,759,760,761,762,763,764,765,766,767,768
+</data>
+ </layer>
+</map>
