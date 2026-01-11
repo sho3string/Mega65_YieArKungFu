@@ -605,16 +605,18 @@ loc_813f:
 	clc
 	adc #<(TILE_OFFSET)
 	sta (byte_f0),y
-	dey
+	iny
 	lda #$00				// attribute page
 	clc
 	adc #>(TILE_OFFSET)
 	sta (byte_f0),y
+	
 
 	// tmp_ptr = tmp_ptr + $40 (next row)
 	lda byte_f0
 	clc
-	adc #$40
+	//adc #$40
+	adc #LINESTEP_BYTES
 	sta byte_f0
 	lda byte_f1
 	adc #0
@@ -730,7 +732,7 @@ sub_8218:
 // byte_1 = pointer high
 // byte_2 = tile number
 
-
+/*
 sub_821a:
     lda #<SCREEN_BASE
     sta byte_0            // pointer = $5800
@@ -764,10 +766,127 @@ loc_821e:
     sta byte_1
 	
     // ---- compare pointer to top of SCREEN_BASE ----
-    lda byte_1
-	cmp #>(SCREEN_BASE+(CHARS_WIDE<<1)*CHARS_HIGH)
-    bne loc_821e
+    lda byte_0
+	cmp #<(SCREEN_BASE+(TOTAL_CHARS<<1)*CHARS_HIGH)
+	bne loc_821e
+	lda byte_1
+	cmp #>(SCREEN_BASE+(TOTAL_CHARS<<1)*CHARS_HIGH)
+	bne loc_821e
 	rts
+*/
+
+
+// Assumes:
+//   SCREEN_BASE   = $2800
+//   CHARS_WIDE    = 32          // visible
+//   CHARS_HIGH    = 32
+//   LINESTEP      = TOTAL_CHARS * 2   // 160 bytes (80 chars × 2)
+
+// byte_0/byte_1 = screen pointer
+// byte_2        = tile number (crosshatch)
+// y             = inner index (0..CHARS_WIDE-1)
+// x             = outer row counter
+
+sub_821a:
+    lda #<SCREEN_BASE
+    sta byte_0
+    lda #>SCREEN_BASE
+    sta byte_1
+
+    ldx #CHARS_HIGH         // 32 rows
+
+row_loop:
+    ldy #0
+
+col_loop:
+    // low byte at (byte_0),Y
+    lda byte_2
+    clc
+    adc #<TILE_OFFSET
+    sta (byte_0),y
+
+    // high byte at Y+1
+    lda #$00
+    clc
+    adc #>TILE_OFFSET
+    iny
+    sta (byte_0),y
+
+    // advance Y by 1 more so we've moved 2 bytes total
+    iny                        // Y += 1 (so net +2 per cell)
+
+    cpy #(CHARS_WIDE*2)        // 32 chars * 2 = 64 bytes
+    bne col_loop
+
+    // at end of row, Y = 64, so pointer to visible-end-of-row:
+    //  byte_0 + 64 = start_of_rrb_tail
+    // now advance to next row start by adding (160 - 64 = 96)
+	
+	// Y = 64 (end of visible region)
+	// byte_0/byte_1 = start of row
+
+	/************************RRB**********************************/
+	
+
+	phx // preserve the number of rows we need to draw the entire screen
+    ldx #RRB_PixiesPerRow
+PixieLoop:
+    // raster
+    lda RRB_PixieProtoType
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+1
+    sta (byte_0),y
+    iny
+
+    // tile
+    lda RRB_PixieProtoType+2
+    clc
+    adc #<TILE_OFFSET
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+3
+    clc
+    adc #>TILE_OFFSET
+    sta (byte_0),y
+    iny
+
+    // GOTOX
+    lda #0
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+5
+    sta (byte_0),y
+    iny
+    dex
+    bne PixieLoop
+    plx
+
+    // dummy tile
+    lda #0
+    sta (byte_0),y
+    iny
+    lda #0
+    sta (byte_0),y
+    iny
+	
+	
+	/**************************************************************/
+	
+	
+
+    clc
+    lda byte_0
+    adc #<LINESTEP_BYTES 
+    sta byte_0
+    lda byte_1
+    adc #>LINESTEP_BYTES 
+    sta byte_1
+
+    dex
+    lbne row_loop
+    rts
+
 	
 loc_8242: // from function table at D9F0
 
@@ -856,9 +975,9 @@ locret_8445:
 *                                                             *
 *  Script Format:                                             *
 *    label:                                                   *
-*        .word tilemap_address   ; MEGA65 tilemap location    *
-*        .byte encoded chars     ; '/', '?', etc.             *
-*        .byte $3F               ; terminator                 *
+*        .word tilemap_address   // MEGA65 tilemap location    *
+*        .byte encoded chars     // '/', '?', etc.             *
+*        .byte $3F               // terminator                 *
 ***************************************************************/
 
 sub_87cf:
@@ -998,7 +1117,7 @@ loc_8808: // not sure what this is for
 loc_8824: // to do
 
 /*****************************
-; Player 1 and Player 2 lives*
+// Player 1 and Player 2 lives*
 *****************************/
 
 loc_892d: 
@@ -1466,9 +1585,8 @@ loc_8be5://R=>L State
     cmp #0
     bne locret_8bf7     // if not finished, return
 
-    //lda byte_a0
+
 	lda #$a0
-	
     sta byte_ca         // ByteCA = #$A0
     inc byte_c4         // advance sub_state
 
@@ -1731,16 +1849,33 @@ no_inc_hi3:
 
 /**********************************
 * Character RAM writes (dot, i, ®)*
-***********************************/
+**********************************/
 
+/**
+ * Character RAM writes (dot, i, ®)
+ * Store accumulator to calculated screen position
+ * 
+ * This calculates a specific screen position for placing a character:
+ * - SCREEN_BASE: Base address of screen memory
+ * - RRB_Tail: Variable representing offset for RRB
+ * - $665/$40: Division (calculating row/column positioning)
+ * - Note: arcade uses a rowsize of $40 / 64 for each row.
+ * - $665-1: Final offset adjustment
+ * $665>>6 is effectively $665/$40 which calculates the row
+ * Arcade uses a rowsize of $40 / 64
+ * The comment indicates this places a "dot above the i" character
+ * at a specific calculated screen coordinate
+ */
+
+	
     lda #$AE
 	//sta $5E65-1
-    sta SCREEN_BASE+$665-1 // dot above the i
+    sta SCREEN_BASE+(RRB_Tail*2*($665>>6))+$665-1 // dot above the i
 	lda #$9F
 	//sta $5EA5-1
-    sta SCREEN_BASE+$6a5-1 // the i
+    sta SCREEN_BASE+(RRB_Tail*2*($6a5>>6))+$6a5-1 // the i
 	lda #$BD
-	sta SCREEN_BASE+$6a7-1 // (r)
+	sta SCREEN_BASE+(RRB_Tail*2*($6a7>>6))+$6a7-1 // (r)
 	//sta $5EA7-1
 	
 loc_8cde: // goes here when finished clearing crosshatch
@@ -1768,7 +1903,7 @@ loc_8de2:
 *This routine simply:                                 *
 •Walks a table of sprite definitions in ROM           *
 •Copies them into the arcade’s sprite RAM at          *
-•Applies a tiny bit of per‑frame adjustment           *
+•Applies a tiny bit of per frame adjustment           *
 •Handles a multi page sprite table                    *
 ******************************************************/
 

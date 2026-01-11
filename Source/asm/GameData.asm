@@ -11,8 +11,6 @@
 byte_4000_shadow: .byte 0
 
 
-
-
 /*********************************************
 * High score table originally at D477 in ROM *
 *********************************************/
@@ -306,7 +304,9 @@ credit:
 	.byte $3f
 
 konami1985:
-	.word SCREEN_BASE+$713-1 // was $5F13-1
+	// -1 is to compensate for reversed [tile, attr] ordering.
+	// $713>>6 is effectively $713/$40 which calculates the row
+	.word SCREEN_BASE+(RRB_Tail*2*($713>>6))+$713-1 // was $5F13-1
 	.byte $3A,$40,$4B,$4F,$4E,$41,$4D,$49,$40,$31,$39,$38,$35	// (C)@KONAMI@1985
 	.byte $3F
 
@@ -702,7 +702,27 @@ da5a:
 	.byte	$28,$81
 	.byte	$0C,$41
 
-	
-	
-	
-	
+/************************************************************
+* Pixie Data (RRB soft sprite entry)                        *
+* Default Pixie struct created during init for each row     *
+*                                                           *
+* byte 0 – Raster X position (low 8 bits)                   *
+* byte 1 – Raster X position (upper 2 bits)                 *
+* (bits 0–1 used, bits 2–7 ignored)                         *
+*                                                           *
+* byte 2 – Tile Index (low byte)                            *
+*           Lower 8 bits of the 16‑bit tile number.         *
+*                                                           *
+* byte 3 – Tile Bank / Tile Page (high byte)                *
+*           Upper 8 bits of the 16 bit tile number.         *
+*           Selects which 256 tile page the pixie uses.     *
+*                                                           *
+* byte 4 - GOTOX command - low bytes                        *
+* byte 5 - GOTOX command - high byte                        *
+*(Final GOTOX to 320, ensure raster ends of screen          *
+*************************************************************/
+
+RRB_PixieProtoType: // to do, set this to a blank tile and move off screen. for now we want to see them all.
+		.byte 245, 0
+		.byte $01, $02
+		.byte 64, 1	

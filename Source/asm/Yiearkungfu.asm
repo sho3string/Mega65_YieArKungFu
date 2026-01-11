@@ -266,50 +266,7 @@
 
 /* Constants */
 
-.const RRB_Buff		= 48	 /* 48 pixies per row = 24 sprites per row. */
-.const GOTOX 			= $10
-.const TRANSPARENT 	= $80
-
-/*
-On arcade.
-
-5800-5fff   RW  video RAM
-byte 0 - bit 4 - character code MSB
-		 bit 6 - flip Y
-		 bit 7 - flip X
-byte 1 - character code LSB
-*/
-
-
-.const SPRITE_RAM1	= $5000
-.const WORK_RAM1		= $5030
-.const SPRITE_RAM2	= $5400
-.const WORK_RAM2		= $5430
-.const SCREEN_BASE	= $2800	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
-.const SCREEN_WIDTH 	= 256	 /* arcade is 256 - 32 characters visible */
-.const SCREEN_HEIGHT 	= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
-.const CHARS_WIDE 	= (SCREEN_WIDTH / 8) 		// 32 characters.
-.const CHARS_HIGH 	= (SCREEN_HEIGHT / 8)		// 32 characters, 28 visible.
-.const TOTAL_CHARS  	= CHARS_WIDE + RRB_Buff   // 80 chars
-.const LINESTEP     	= TOTAL_CHARS * 2         // 160 bytes
-.const LOGICAL_WIDTH	= (CHARS_WIDE << 1) + (RRB_Buff << 1 ) // 64 for characters + 96 for pixies. 2 bytes for each character and pixie.
-
-
-
-.const COLOR_RAM		= $FF80000
-//.const LOADADDR		= $40000			// use spare ram to load stuff into.
-.const GRAPHMEM  		= $20000 			// this will be our character generator at bank 2
-.const TILE_OFFSET	= GRAPHMEM/64
-//.const MEMBANK		= LOADADDR>>16		// 0x40000 >> 16 = 4
-
-.const hw_nmi_vec 	= $fffa
-.const hw_irq_vec 	= $fffe
-.const vicii_irqmask 	= $d01a
-.const ciaa_d 			= $dc0d
-.const ciab_d 			= $dd0d
-.const vicii_rcl 		= $d012
-.const vicii_rch 		= $d011  ; bit 7
-.const vicii_irq		= $d019
+#import "Source/asm/Constants.asm"
 
 
 BasicUpstart65(Entry)
@@ -345,7 +302,9 @@ Entry:
 	disableC65ROM()
 	
 	// Loads assets
-	LoadFile(GRAPHMEM, "TILESHEET.CHR") // Load
+	LoadFile(GRAPHMEM, "TILESHEET.CHR") // Load graphical assets ( sprites and backghrounds )
+	LoadFile(COLOR_RAM, "COLORRAM.BIN") // Load the RRB colour stream
+
 	// Disable raster interrupts.
 	lda #$00
 	sta vicii_irqmask
@@ -367,38 +326,11 @@ Entry:
 	
 	jsr	setUpDisplay
 	jsr setUpPalette
-	
-	/*
-	// testing
-	
-	lda #$01
-    clc
-    adc #<(TILE_OFFSET)
-    sta $5880       // store low byte
-
-    // ---- compute high byte of tile index ----
-    lda #$00              // attribute page
-    clc
-    adc #>(TILE_OFFSET)
-    sta $5881       // store high byte
-	
-	lda #$02
-    clc
-    adc #<(TILE_OFFSET)
-    sta $5940       // store low byte
-
-    // ---- compute high byte of tile index ----
-    lda #$00              // attribute page
-    clc
-    adc #>(TILE_OFFSET)
-    sta $5941       // store high byte
-    jmp *
-	*/
-	
+	//jsr	CopyColors
 	jsr loc_8163
 }
 
-#import "Source/asm/charRamHelper.asm"
+//#import "Source/asm/charRamHelper.asm"
 #import "Source/asm/Game.asm"
 #import "Source/asm/GameData.asm"
 #import "Source/asm/Irq.asm"
@@ -439,6 +371,4 @@ buffer:
 	//.fill (SCREEN_BASE+$800) - SCREEN_BASE, 0    // reserve 0x800 bytes (2048 bytes) for the playfield.
 	
 	//  0x800 + 0xC00  = 0x1400
-	.fill ((SCREEN_BASE+(SCREEN_WIDTH/8 * SCREEN_HEIGHT/8)* 2) + ((RRB_Buff*CHARS_HIGH*2) - SCREEN_BASE)), 0
-	
-	
+	.fill (((SCREEN_WIDTH/8 * SCREEN_HEIGHT/8)* 2) + ((RRB_Tail*CHARS_HIGH*2))), 0
