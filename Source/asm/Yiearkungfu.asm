@@ -327,7 +327,15 @@ Entry:
 	jsr	setUpDisplay
 	jsr setUpPalette
 	//jsr	CopyColors
-	jsr loc_8163
+	
+	ldy #(byte_ff - byte_0)
+	lda #$00
+clearVars:
+	sta byte_0,y
+	dey
+	bne clearVars
+	
+	jsr loc_8163	// start game.
 }
 
 //#import "Source/asm/charRamHelper.asm"

@@ -6,7 +6,7 @@
 *   .byte 0,0                                             *
 **********************************************************/
 
-.const RRB_PixiesPerRow	= 20
+.const RRB_PixiesPerRow	= 31
 .const RRB_Tail			= (RRB_PixiesPerRow * 3) + 1
 .const GOTOX 				= $10
 .const TRANSPARENT 		= $80
