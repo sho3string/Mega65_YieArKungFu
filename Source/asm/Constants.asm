@@ -21,7 +21,7 @@ byte 0 - bit 4 - character code MSB
 byte 1 - character code LSB
 */
 
-
+.const CMD_QUEUE		= $52C0
 .const SPRITE_RAM1	= $5000
 .const WORK_RAM1		= $5030
 .const SPRITE_RAM2	= $5400
@@ -51,3 +51,16 @@ byte 1 - character code LSB
 .const vicii_rcl 		= $d012
 .const vicii_rch 		= $d011  ; bit 7
 .const vicii_irq		= $d019
+
+// 6809 registers
+
+.const B_Register		= $f2
+.const U_L				= $f3
+.const U_H				= $f4
+.const X_L				= $f5
+.const X_H				= $f6
+.const FB_L			= $f7
+.const FB_H			= $f8
+.const A_Register		= $f9
+.const Flags			= $fa
+.const tmp				= $fb

@@ -322,20 +322,20 @@ loc_807c:
 	// ------------------------------------------------------------
 	
 	lda byte_db
-    cmp #$52
+    cmp #>CMD_QUEUE		// 0x52c0
     bcc pointer_ok        // < $52xx → OK
     bne do_wrap           // > $52xx → wrap
 
     // high byte == $52, check low
     lda byte_da
-    cmp #$FF
+    cmp #<CMD_QUEUE+$3f
     bcc pointer_ok        // < $52FF → OK
     beq pointer_ok        // == $52FF → OK
 
 do_wrap:
-    lda #<$52c0
+    lda #<CMD_QUEUE
     sta byte_da
-    lda #>$52c0
+    lda #>CMD_QUEUE
     sta byte_db
     jmp store_da
 pointer_ok:
@@ -395,9 +395,9 @@ loc_80a2:
     bcc store_ptr        // < 5300 → keep
 
 wrap_ptr:
-    lda #<($52c0)
+    lda #<(CMD_QUEUE)
     sta byte_f0
-    lda #>($52c0)
+    lda #>(CMD_QUEUE)
     sta byte_f1
 
 store_ptr:
@@ -473,7 +473,7 @@ sub_80c5:
     lda byte_e7
     ora byte_e8
     bne loc_80e8
-    inc $520F       // word_520E+1
+    inc WORK_RAM1+$1DF // word_520E+1
 
 loc_80e8:
 
@@ -496,7 +496,7 @@ loc_80e8:
     lda byte_ec
     ora byte_ed
     bne loc_80fb
-    inc $520F      // word_520E+1
+    inc WORK_RAM1+$1DF  // word_520E+1
 
 loc_80fb:
 
@@ -825,7 +825,7 @@ col_loop:
 	// Y = 64 (end of visible region)
 	// byte_0/byte_1 = start of row
 
-	/************************RRB**********************************/
+	/************************RRB INIT**********************************/
 	
 
 	phx // preserve the number of rows we need to draw the entire screen
@@ -870,11 +870,8 @@ PixieLoop:
     sta (byte_0),y
     iny
 	
+	/******************************************************************/
 	
-	/**************************************************************/
-	
-	
-
     clc
     lda byte_0
     adc #<LINESTEP_BYTES 
@@ -1867,15 +1864,16 @@ no_inc_hi3:
  * at a specific calculated screen coordinate
  */
 
-	
+.const arcadeRowSize = 6 // offset/0x40
+
     lda #$AE
 	//sta $5E65-1
-    sta SCREEN_BASE+(RRB_Tail*2*($665>>6))+$665-1 // dot above the i
+    sta SCREEN_BASE+(RRB_Tail*2*($665>>arcadeRowSize))+$665-1 // dot above the i
 	lda #$9F
 	//sta $5EA5-1
-    sta SCREEN_BASE+(RRB_Tail*2*($6a5>>6))+$6a5-1 // the i
+    sta SCREEN_BASE+(RRB_Tail*2*($6a5>>arcadeRowSize))+$6a5-1 // the i
 	lda #$BD
-	sta SCREEN_BASE+(RRB_Tail*2*($6a7>>6))+$6a7-1 // (r)
+	sta SCREEN_BASE+(RRB_Tail*2*($6a7>>arcadeRowSize))+$6a7-1 // (r)
 	//sta $5EA7-1
 	
 loc_8cde: // goes here when finished clearing crosshatch
@@ -1893,6 +1891,164 @@ loc_8cf6:
 loc_8de2:
 	jmp *
 	
+/*
+
+chat gpt routine 
+sub_8b30:
+    lda #0
+    sta B_Register
+
+    SETU($5030)
+    SETX($5000)
+
+    lda byte_c1
+    sta A_Register
+    jsr ASRA_A
+    BCS(Inverted_Mode)
+
+Normal_Loop:
+
+    
+	ldy #4
+    lda (U_L),y
+    STA_FB0()
+
+    ldy #$0e
+    lda (U_L),y
+    STA_FB1()
+
+    ldy #$0f
+    lda (U_L),y
+    STA_XP()
+	
+	
+	ldy #4
+    lda (U_L),y
+    STA_FB0()
+
+    ldy #$0e
+    lda (U_L),y
+    STA_FB1()
+
+    ldy #$0f
+    lda (U_L),y
+    STA_XP()
+
+    ldy #6
+    lda (U_L),y
+
+    CMPX($5026)
+    bcs NoEdge_N
+
+    pha
+    lda $00c1
+    sta A_Register
+    jsr ASRA_A
+    pla
+    BCS(Dec_N)
+    clc
+    adc #1
+    jmp Store_N
+Dec_N:
+    sec
+    sbc #1
+Store_N:
+NoEdge_N:
+	ldy #$0
+    sta (X_L),y
+    INC16(X_L,X_H)
+
+    ADDU($10)
+
+    CMPU($5050)
+    lbcs Normal_Loop
+    bne Normal_Post
+
+    lda B_Register
+    bne Normal_Post
+    lda $5222
+    beq Normal_Post
+    ADDU($40)
+
+Normal_Post:
+    CMPX($5030)
+    lbcs Done
+    CMPU($51b0)
+    lbcs Normal_Loop
+
+    SETU($5050)
+    inc B_Register
+    jmp Normal_Loop
+
+Inverted_Mode:
+Inv_Loop:
+
+    ldy #4
+    lda (U_L),y
+    eor #$ff
+    sec
+    sbc #$0f
+    STA_FB0()
+
+    ldy #$0e
+    lda (U_L),y
+    STA_FB1()
+
+    ldy #$0f
+    lda (U_L),y
+    eor #$40
+    STA_XP()
+
+    ldy #6
+    lda (U_L),y
+
+    CMPX($5026)
+    bcs NoEdge_I
+
+    pha
+    lda byte_c1
+    sta A_Register
+    jsr ASRA_A
+    pla
+    BCS(Dec_I)
+    clc
+    adc #1
+    jmp Store_I
+Dec_I:
+    sec
+    sbc #1
+Store_I:
+NoEdge_I:
+	ldy #$0
+    sta (X_L),y
+    INC16(X_L,X_H)
+
+    ADDU($10)
+
+    CMPU($5050)
+    lbcs Inv_Loop
+    bne Inv_Post
+
+    lda B_Register
+    bne Inv_Post
+    lda $5222
+    beq Inv_Post
+    ADDU($40)
+
+Inv_Post:
+    CMPX($5030)
+    bcs Done
+    CMPU($51b0)
+    lbcs Inv_Loop
+
+    SETU($5050)
+    inc B_Register
+    jmp Inv_Loop
+
+Done:
+    rts
+*/
+	
 /******************************************************
 *Main VBLANK routine (Sprites)                        *
 *sub_8B30 - locret_8BDC                               *
@@ -1907,16 +2063,23 @@ loc_8de2:
 •Handles a multi page sprite table                    *
 ******************************************************/
 
-/*$5000–$5030   (sprite attribute table)
+/*
+
+This is our Sprite Producer.
 
 Each sprite entry is 4 bytes
-$5000: Y
-$5001: X
-$5002: Tile#
-$5003: Attr
+5000-502f    W  sprite RAM 1 (18 sprites)
+                    byte 0 - bit 0 - sprite code MSB
+                             bit 6 - flip X
+                             bit 7 - flip Y
+                    byte 1 - Y position
+					
+5400-542f    W  sprite RAM 2
+                    byte 0 - X position
+                    byte 1 - sprite code LSB
 
-- Starts reading sprite definitions from ROM at $5030
-- Copies each sprite’s 4 bytes into $5000 + sprite_index*4
+- Starts reading sprite definitions from ROM at $5000 - $502f and $5400 - $542f
+- Copies each sprite’s 4 bytes
 - Moves to the next sprite definition (leau $10,u = next sprite block)
 - Loops until all sprites are copied
 - Handles a second page of sprite definitions if needed (leau $40,u)
@@ -1924,10 +2087,283 @@ $5003: Attr
 */
 
 
-
-
 sub_8b30:
-	rts
+
+    CLRB()
+    // ldu #$5030
+    LDU(WORK_RAM1)
+    // ldx #$5000
+    LDX(SPRITE_RAM1)
+    // lda $C1
+    LDA(byte_c1)
+    // asra
+    ASRA()
+    // bcs loc_8B8A
+    BCS(loc_8b8a)
+	
+// ROM:8B3C loc_8B3C:
+
+loc_8b3c:
+    // lda 4,u -> SPRITE_RAM2 byte0
+    ldy #4
+    lda (U_L),y
+    STA_SPR2_0()
+
+    // lda $0e,u -> SPRITE_RAM2 byte1
+    ldy #$0e
+    lda (U_L),y
+    STA_SPR2_1()
+
+    // lda $0f,u -> SPRITE_RAM1 byte0 (attr)
+    ldy #$0f
+    lda (U_L),y
+    STA_SPR1_POSTINC()
+
+    // lda 6,u  (candidate Y)
+    ldy #6
+    lda (U_L),y
+
+    // cmpx #$5026 / bcc loc_8b60  (X is offset now)
+    ldx X_L
+    cpx #$26
+    bcs loc_8b60
+
+    // save Y (DO NOT use tmp; ASRA uses tmp)
+    sta byte_fc
+
+    // ASRA(byte_c1) -> Flags bit0
+    lda byte_c1
+    sta A_Register
+    ASRA()
+
+    // put Flags bit0 into CPU carry
+    lda Flags
+    lsr
+
+    // restore Y
+    lda byte_fc
+
+    // carry set => DEC
+    bcs loc_8b5f
+
+    // INC
+    clc
+    adc #1
+    jmp loc_8b60
+
+loc_8b5f:
+    sec
+    sbc #1
+
+loc_8b60:
+    // sta ,x+
+    STA_SPR1_POSTINC()
+
+    // leau $10,u
+    ADDU($0010)
+
+    // cmpu #$5050 / bcs loc_8B3C   (U < $5050)
+    BR_IF_U_LT(WORK_RAM1 + $20, loc_8b3c)    // $5030 + $20 = $5050
+
+    // bne loc_8B78   (U != $5050)
+    BR_IF_U_NE(WORK_RAM1 + $20, loc_8b78)
+
+    // tstb / bne loc_8B78
+    lda B_Register
+    bne loc_8b78
+
+    // lda word_5221+1 / beq loc_8B78
+    lda WORK_RAM1 + $01f2   // == $5222
+	beq loc_8b78
+
+    // leau $40,u
+    ADDU($0040)
+
+loc_8b78:
+    // cmpx #$5030 / bcc locret_8B89
+    // (branch if X >= $5030)
+    lda X_H
+    cmp #>WORK_RAM1          // $5030
+    bcc !x_lt+
+    bne locret_8b89
+    lda X_L
+    cmp #<WORK_RAM1
+    bcs locret_8b89
+!x_lt:
+
+    // cmpu #$51B0 / bcs loc_8B3C
+    // (branch if U < $51B0, consistent with earlier port usage)
+    lda U_H
+    cmp #>WORK_RAM1+$180
+    lbcc loc_8b3c
+    bne !u_not_lt+
+    lda U_L
+    cmp #<WORK_RAM1+$180
+    lbcc loc_8b3c
+!u_not_lt:
+
+    // ldu #$5050
+    lda #<(WORK_RAM1 + $20)  // $5050
+    sta U_L
+    lda #>(WORK_RAM1 + $20)
+    sta U_H
+
+    // incb
+    inc B_Register
+
+    // bra loc_8B3C
+    jmp loc_8b3c
+
+locret_8b89:
+    rts
+
+
+loc_8b8a:
+    // lda 4,u / coma / suba #$0f  -> SPRITE_RAM2 byte0
+    ldy #4
+    lda (U_L),y
+    eor #$ff
+    sec
+    sbc #$0f
+    STA_SPR2_0()
+
+    // lda $0e,u -> SPRITE_RAM2 byte1
+    ldy #$0e
+    lda (U_L),y
+    STA_SPR2_1()
+
+    // lda $0f,u / eor #$40 -> SPRITE_RAM1 byte0
+    ldy #$0f
+    lda (U_L),y
+    eor #$40
+    STA_SPR1_POSTINC()
+
+    // lda 6,u  (candidate Y)
+    ldy #6
+    lda (U_L),y
+
+    // cmpx #$5026 / bcc loc_8bb3  (X is offset now)
+    ldx X_L
+    cpx #$26
+    bcs loc_8bb3
+
+    // save Y safely
+    sta byte_fc
+
+    // ASRA(byte_c1) -> Flags bit0
+    lda byte_c1
+    sta A_Register
+    ASRA()
+
+    // Flags bit0 -> CPU carry
+    lda Flags
+    lsr
+
+    // restore Y
+    lda byte_fc
+
+    bcs loc_8bb2
+
+    // INC
+    clc
+    adc #1
+    jmp loc_8bb3
+
+loc_8bb2:
+    // DEC
+    sec
+    sbc #1
+
+loc_8bb3:
+    // store Y -> SPRITE_RAM1 byte1
+    STA_SPR1_POSTINC()
+
+    // leau $10,u
+    clc
+    lda U_L
+    adc #<$0010
+    sta U_L
+    lda U_H
+    adc #>$0010
+    sta U_H
+
+    // cmpu #$5050
+    // bcs loc_8B8A
+    // (branch if U < $5050, consistent with earlier port usage)
+    lda U_H
+    cmp #>(WORK_RAM1 + $20)      // $5050
+    lbcc loc_8b8a
+    bne !u_not_lt_5050+
+    lda U_L
+    cmp #<(WORK_RAM1 + $20)
+    lbcc loc_8b8a
+!u_not_lt_5050:
+
+    // bne loc_8BCB
+    lda U_H
+    cmp #>(WORK_RAM1 + $20)
+    bne loc_8bcb
+    lda U_L
+    cmp #<(WORK_RAM1 + $20)
+    bne loc_8bcb
+
+    // tstb / bne loc_8BCB
+    lda B_Register
+    bne loc_8bcb
+
+    // lda word_5221+1 / beq loc_8BCB
+    lda WORK_RAM1 + $01f2   // == $5222
+    beq loc_8bcb
+
+    // leau $40,u
+    clc
+    lda U_L
+    adc #<$0040
+    sta U_L
+    lda U_H
+    adc #>$0040
+    sta U_H
+
+loc_8bcb:
+    // cmpx #$5030
+    // bcc locret_8BDC
+    // (branch if X >= $5030)
+    lda X_H
+    cmp #>WORK_RAM1              // $5030
+    bcc !x_lt_5030+
+    bne locret_8bdc
+    lda X_L
+    cmp #<WORK_RAM1
+    bcs locret_8bdc
+!x_lt_5030:
+
+    // cmpu #$51B0
+    // bcs loc_8B8A
+    // (branch if U < $51B0, consistent with earlier port usage)
+    lda U_H
+    cmp #>WORK_RAM1+$180
+    lbcc loc_8b8a
+    bne !u_not_lt_51b0+
+    lda U_L
+    cmp #<WORK_RAM1+$180
+    lbcc loc_8b8a
+!u_not_lt_51b0:
+
+    // ldu #$5050
+    lda #<(WORK_RAM1 + $20)
+    sta U_L
+    lda #>(WORK_RAM1 + $20)
+    sta U_H
+
+    // incb
+    inc B_Register
+
+    // bra loc_8B8A
+    jmp loc_8b8a
+
+locret_8bdc:
+    rts
+
 
 sub_92ad:
     // if F1 != $18 → return
