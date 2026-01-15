@@ -306,7 +306,7 @@ credit:
 konami1985:
 	// -1 is to compensate for reversed [tile, attr] ordering.
 	// $713>>6 is effectively $713/$40 which calculates the row
-	.word SCREEN_BASE+(RRB_Tail*2*($713>>6))+$713-1 // was $5F13-1
+	.word SCREEN_BASE+(RRB_Tail_words*2*($713>>6))+$713-1 // was $5F13-1
 	.byte $3A,$40,$4B,$4F,$4E,$41,$4D,$49,$40,$31,$39,$38,$35	// (C)@KONAMI@1985
 	.byte $3F
 
@@ -701,6 +701,10 @@ da5a:
 ***************/
 	.byte	$28,$81
 	.byte	$0C,$41
+	
+	
+daba:
+	.word loc_9252,loc_926D,loc_9285
 
 /************************************************************
 * Pixie Data (RRB soft sprite entry)                        *
@@ -721,8 +725,28 @@ da5a:
 * byte 5 - GOTOX command - high byte                        *
 *(Final GOTOX to 320, ensure raster ends of screen          *
 *************************************************************/
+// each page = 255 characters, this corresponds to 0x100 offset when looking at 8x8 tiles
+// when looking at sprites, these are 16x16. Therefore a single page = 0x40 for offset when looking at the sheet.
 
-RRB_PixieProtoType: // to do, set this to a blank tile and move off screen. for now we want to see them all.
-		.byte 245, 0
-		.byte $01, $02
-		.byte 64, 1	
+
+/* Sprite calculation for Mega65 
+
+On Arcade Blank TILE is page 1 of Spritesheet, 16x16 TILE # 0x13 [ 19 ]
+Or $113
+
+Since Spritesheet on the Mega65 is added to the tilesheet
+
+1. Calculate start of Spritesheet.
+Spritesheet starts at page 2 [ 512 characters / 256 per page ]
+
+2. Calculate page from arcade and convert to Mega65
+1 Page of Sprite is [ 256 16x16 objects ] = [512 8x8 Mega65 tiles]
+Multiply page# by 2 to get corresponding Page# on Mega65 for the object
+Calculation: Start at page 2 + page# of sprite * 2.
+Find tile offset: 13 
+*/
+
+RRB_PixieProtoType: // set this to a blank tile and move off screen, say 0xff. for now we want to see them all as we troubleshoot
+		.byte 245, 0	// 255,0
+		.byte 69, $06  
+		.byte 64, 1		// 64,1 is default.

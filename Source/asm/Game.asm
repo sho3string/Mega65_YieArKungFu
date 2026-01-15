@@ -328,7 +328,7 @@ loc_807c:
 
     // high byte == $52, check low
     lda byte_da
-    cmp #<CMD_QUEUE+$3f
+    cmp #<CMD_QUEUE+$3f	// c0+$3f = 0xff.
     bcc pointer_ok        // < $52FF → OK
     beq pointer_ok        // == $52FF → OK
 
@@ -1136,6 +1136,11 @@ loc_897d:
 
     // call main VBLANK routine (Sprites) 
     jsr sub_8b30
+	
+    jsr BuildSpriteQueueFromArcadeRAM
+    jsr BuildPixieBucketsFromSpriteQueue
+
+
     // call secondary routine (Other functions)
     jsr sub_899e
 
@@ -1439,15 +1444,15 @@ loc_8abc:
 
     // ----- DAA: adjust low nibble -----
     cmp #$0A
-    bcc DAA_8ABC_LowDone
+    bcc daa_8abc_lowdone
     adc #$06
-DAA_8ABC_LowDone:
+daa_8abc_lowdone:
 
     // ----- DAA: adjust high nibble -----
     cmp #$A0
-    bcc DAA_8ABC_HighDone
+    bcc daa_8abc_highdone
     adc #$60
-DAA_8ABC_HighDone:
+daa_8abc_highdone:
 
     cmp #$91
     bcc loc_8acb          // if < $91 → use result
@@ -1868,12 +1873,12 @@ no_inc_hi3:
 
     lda #$AE
 	//sta $5E65-1
-    sta SCREEN_BASE+(RRB_Tail*2*($665>>arcadeRowSize))+$665-1 // dot above the i
+    sta SCREEN_BASE+(RRB_Tail_words	*2*($665>>arcadeRowSize))+$665-1 // dot above the i
 	lda #$9F
 	//sta $5EA5-1
-    sta SCREEN_BASE+(RRB_Tail*2*($6a5>>arcadeRowSize))+$6a5-1 // the i
+    sta SCREEN_BASE+(RRB_Tail_words	*2*($6a5>>arcadeRowSize))+$6a5-1 // the i
 	lda #$BD
-	sta SCREEN_BASE+(RRB_Tail*2*($6a7>>arcadeRowSize))+$6a7-1 // (r)
+	sta SCREEN_BASE+(RRB_Tail_words	*2*($6a7>>arcadeRowSize))+$6a7-1 // (r)
 	//sta $5EA7-1
 	
 loc_8cde: // goes here when finished clearing crosshatch
@@ -1891,163 +1896,6 @@ loc_8cf6:
 loc_8de2:
 	jmp *
 	
-/*
-
-chat gpt routine 
-sub_8b30:
-    lda #0
-    sta B_Register
-
-    SETU($5030)
-    SETX($5000)
-
-    lda byte_c1
-    sta A_Register
-    jsr ASRA_A
-    BCS(Inverted_Mode)
-
-Normal_Loop:
-
-    
-	ldy #4
-    lda (U_L),y
-    STA_FB0()
-
-    ldy #$0e
-    lda (U_L),y
-    STA_FB1()
-
-    ldy #$0f
-    lda (U_L),y
-    STA_XP()
-	
-	
-	ldy #4
-    lda (U_L),y
-    STA_FB0()
-
-    ldy #$0e
-    lda (U_L),y
-    STA_FB1()
-
-    ldy #$0f
-    lda (U_L),y
-    STA_XP()
-
-    ldy #6
-    lda (U_L),y
-
-    CMPX($5026)
-    bcs NoEdge_N
-
-    pha
-    lda $00c1
-    sta A_Register
-    jsr ASRA_A
-    pla
-    BCS(Dec_N)
-    clc
-    adc #1
-    jmp Store_N
-Dec_N:
-    sec
-    sbc #1
-Store_N:
-NoEdge_N:
-	ldy #$0
-    sta (X_L),y
-    INC16(X_L,X_H)
-
-    ADDU($10)
-
-    CMPU($5050)
-    lbcs Normal_Loop
-    bne Normal_Post
-
-    lda B_Register
-    bne Normal_Post
-    lda $5222
-    beq Normal_Post
-    ADDU($40)
-
-Normal_Post:
-    CMPX($5030)
-    lbcs Done
-    CMPU($51b0)
-    lbcs Normal_Loop
-
-    SETU($5050)
-    inc B_Register
-    jmp Normal_Loop
-
-Inverted_Mode:
-Inv_Loop:
-
-    ldy #4
-    lda (U_L),y
-    eor #$ff
-    sec
-    sbc #$0f
-    STA_FB0()
-
-    ldy #$0e
-    lda (U_L),y
-    STA_FB1()
-
-    ldy #$0f
-    lda (U_L),y
-    eor #$40
-    STA_XP()
-
-    ldy #6
-    lda (U_L),y
-
-    CMPX($5026)
-    bcs NoEdge_I
-
-    pha
-    lda byte_c1
-    sta A_Register
-    jsr ASRA_A
-    pla
-    BCS(Dec_I)
-    clc
-    adc #1
-    jmp Store_I
-Dec_I:
-    sec
-    sbc #1
-Store_I:
-NoEdge_I:
-	ldy #$0
-    sta (X_L),y
-    INC16(X_L,X_H)
-
-    ADDU($10)
-
-    CMPU($5050)
-    lbcs Inv_Loop
-    bne Inv_Post
-
-    lda B_Register
-    bne Inv_Post
-    lda $5222
-    beq Inv_Post
-    ADDU($40)
-
-Inv_Post:
-    CMPX($5030)
-    bcs Done
-    CMPU($51b0)
-    lbcs Inv_Loop
-
-    SETU($5050)
-    inc B_Register
-    jmp Inv_Loop
-
-Done:
-    rts
-*/
 	
 /******************************************************
 *Main VBLANK routine (Sprites)                        *
@@ -2364,6 +2212,13 @@ loc_8bcb:
 locret_8bdc:
     rts
 
+/* Waterfall code*/
+
+loc_9252:
+loc_926D:
+loc_9285:
+	rts
+
 
 sub_92ad:
     // if F1 != $18 → return
@@ -2402,9 +2257,9 @@ sub_92ad:
 
 loc_92ca:
     // U = $DABA
-    lda #<$DABA
+    lda #<daba
     sta byte_46
-    lda #>$DABA
+    lda #>daba
     sta byte_47
 
     // first call to sub_92df

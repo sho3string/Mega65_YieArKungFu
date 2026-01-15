@@ -8,13 +8,15 @@ setUpDisplay:
 	// 320 X 200 High res screen Mode
 	lda #$80
 	trb $D031		// clear bit 7 = H320
+	
 	lda #$08
 	trb $D031		// clear bit 3 - H200
 	
 	lda #TOTAL_CHARS
 	sta $D05E		// 32 Characters per row
+	
 	lda #CHARS_HIGH
-	sta $D07B		// 28 rows high
+	sta $D07B		// 32 rows high ( 28 visible )
 
 	// Text X starting position
 	lda #143
@@ -38,11 +40,9 @@ setUpDisplay:
 	sta $D04A
 
 	// char step
-	//lda #<LINESTEP // Set linestep 
-	lda #<CHARS_WIDE*2
+	lda #<LINESTEP_BYTES // Set linestep 
 	sta $D058
-	//lda #>LINESTEP
-	lda #>CHARS_WIDE*2
+	lda #>LINESTEP_BYTES
 	sta $D059
 	
 	// 16 bit character mode, byte 0 - LSB, byte 1 first 5 bits MSB + attributes
