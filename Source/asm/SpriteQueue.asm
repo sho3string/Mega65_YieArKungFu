@@ -1,61 +1,789 @@
-/*How to index entries
+// ============================================================
+// Sprite → Pixie → RRB Pipeline
+// ============================================================
+//
+// This module converts arcade sprite RAM into RRB “pixies”
+// (8x8 strips) and emits per-row command streams for the
+// MEGA65 RRB renderer.
+//
+// The pipeline is split into 4 stages:
+//
+// ------------------------------------------------------------
+// 1. BuildSpriteQueueFromArcadeRAM
+// ------------------------------------------------------------
+// Reads raw arcade sprite RAM and builds a compact queue.
+//
+// - Iterates all hardware sprites
+// - Skips uninitialised/parked entries (Y = $00 or $01)
+// - Extracts and normalises:
+//     Y, X, TILE, ATTR (with flip bits separated)
+// - Stores 4-byte entries into SpriteQueueData:
+//     [Y, X, TILE, ATTR]
+//
+// Result: a clean, tightly packed sprite queue for this frame.
+//
+// ------------------------------------------------------------
+// 2. BuildPixieListFromSpriteQueue
+// ------------------------------------------------------------
+// Expands each 16x16 sprite into 8x8 “pixies” suitable for RRB.
+//
+// For each sprite:
+// - Converts arcade Y (inverted) into screen space
+// - Applies Y bias
+// - Splits Y into:
+//     coarse row (8-pixel rows)
+//     fine Y (sub-row offset 0..7)
+// - Computes base 8x8 tile index (top-left tile)
+// - Uses TopMask/BotMask to clip rows for fine Y scrolling
+//
+// Each sprite produces:
+//   Coarse (aligned): 4 pixies (2 rows)
+//   Fine (sub-pixel): up to 8 pixies (3 rows, with masking)
+//
+// Emits pixies into arrays:
+//   PixieRow, PixieXLo/Hi, PixieTileLo/Hi, PixieMask, Active
+//
+// Also assigns each pixie to a row (PixieRow), which is later
+// used by the RRB builder.
+//
+// ------------------------------------------------------------
+// 3. RRB_BuildRow
+// ------------------------------------------------------------
+// Builds one RRB row command stream.
+//
+// - Scans all pixies
+// - Selects those matching CurrentRow
+// - Stores indices into RowOrder[]
+// - Clamps to hardware limit (RRB_PixiesPerRow = 37)
+// - Sorts by X (insertion sort, stable enough for small sets)
+//
+// Emits:
+//   - Screen commands (X, tile, gotoX)
+//   - Colour commands (mask, attributes)
+//
+// Pads remaining slots with prototype entries
+// Writes final EOL markers
+//
+// Result: fully formed RRB command list for one row.
+//
+// ------------------------------------------------------------
+// 4. RRB_BuildAllRows
+// ------------------------------------------------------------
+// Builds all rows for the frame.
+//
+// - Iterates all character rows
+// - Advances screen + colour pointers per row
+// - Applies frame-phase split (even/odd rows per frame)
+//   to avoid vblank overrun
+// - Calls RRB_BuildRow for active rows only
+//
+// After completion:
+// - Clears per-frame pixie “used” flags
+//
+// ------------------------------------------------------------
+// Tile Layout Assumption
+// ------------------------------------------------------------
+//
+// Tilesheet layout is pre-arranged as:
+//
+//   [TL][BL]
+//   [TR][BR]
+//
+// Tile offsets from base8:
+//   TL = +0
+//   BL = +1
+//   TR = +16
+//   BR = +17
+//
+// Additional offsets (+2, +18) are used for lower spill rows.
+//
+// No runtime tile remapping is required.
+//
+// ------------------------------------------------------------
+// Notes / Constraints
+// ------------------------------------------------------------
+//
+// - Maximum pixies per row is limited to 37 (RRB constraint)
+// - Excess pixies are dropped after clamping
+// - Fine Y uses bit 5–7 encoding in PixieXHi (FCM mode)
+// - Frame-phase splitting halves per-frame workload
+// - Current implementation performs per-row scan + sort
+//   (candidate for future optimisation via row-linked lists)
+//
+// ============================================================
+// TODO (perf):
+// Current approach scans ALL pixies per row and sorts them (O(N²)).
+// Replace with per-row linked lists (RowHead/PixieNext) built during
+// pixie emission to eliminate scan + sort entirely.
 
-Entry i (0..23):
 
-// offset = i*4
-// base   = SpriteQueueData
+// ZP temps (use your existing ones)
+.const Q_IDX   	= byte_33   // reuse if safe in this scope
+.const P_IDX   	= byte_34   // reuse if safe in this scope
+.const Q_Y     	= byte_35
+.const Q_X     	= byte_36
+.const Q_TILE  	= byte_37
+.const Q_ATTR  	= byte_38
+.const TLo     	= byte_39
+.const THi     	= byte_3a
+.const Q_TOP      	= byte_3b   // top mask
+.const ROW     	= byte_3c   // coarse row for this sprite
+.const CurrentRow	= byte_3d
+.const Q_ATTR_RAW	= byte_3e
+.const Q_FLIPBITS	= byte_3f
+.const Q_ROW		= byte_40
+.const Q_TMP		= byte_41   // general scratch (was Q_YME in old code)
+.const Q_CARRY 	= byte_42   // carry temp for tile hi add
+.const Q_YSUB5		= byte_43   // MUST be a safe scratch not used elsewhere
+.const Q_YSUB		= byte_44 
+.const XHI_TEMP	= byte_45
+.const COLPTR0 	= byte_46
+.const COLPTR1 	= byte_47
+.const COLPTR2 	= byte_48
+.const COLPTR3 	= byte_49
+.const SORT_I		= byte_4a   // choose free zp
+.const KEY_X		= byte_4b
+.const Q_XHI		= byte_4c
+.const Q_BOT      	= byte_4d
 
-// Y    at SpriteQueueData + offset + 0
-// X    at SpriteQueueData + offset + 1
-// TILE at SpriteQueueData + offset + 2
-// ATTR at SpriteQueueData + offset + 3
-
-
-So in code you do:
-
-lda i
-asl
-asl
-tay
-lda SpriteQueueData+0,y   // Y
-
-*/
-
-.const Q_IDX	= byte_34
-.const Q_Y		= byte_35
-.const Q_X		= byte_36
-.const Q_TILE	= byte_37
-.const Q_ATTR	= byte_38		// “sanitized for queue”: keep bit0, clear bits6/7
-.const TLo		= byte_39
-.const THi		= byte_3a
-.const Q_YME	= byte_3b
-.const Q_ATTR_RAW = byte_3c	// original arcade full byte
-.const Q_FLIPBITS = byte_3d	// just bits 6/7 ( FlipX/FlipY ) of attribute from arcade
-
-
-.const SPRITE_BASE_PAGE = 0
-.const SPR_TILE_STRIDE  = 16     // 16 tiles across
-.const SPR_TILE_BASE	  = $0200  // Add offset to tilesheet to begin at sprite data.
-
+.const FCM_YOFFS_DIR		= $10	// bit4 in raster-hi
+.const SPR_TILE_STRIDE	= 16	// 16 tiles across
+.const SPR_TILE_BASE		= $0200	// Add offset to tilesheet to begin at sprite data.
+.const Y_BIAS				= 16
 
 *=* "Sprite Queue Routines - SpriteQueue.asm"
 
-BuildPixieBucketsFromSpriteQueue:
+/* Test 1 Sprite */
+
+BuildSpriteQueueFromArcadeRAM:
     lda #0
+    sta SpriteQueueCount // clear count of sprite queue
+	sta Q_IDX			   // clear sprite index
+
+!loop:
+    lda Q_IDX
+    cmp #SPRITE_MAX
+    bcs !done+
+
+    // srcOff = spriteIndex * 2
+    //lda Q_IDX
+    asl
+    tay
+
+    // ---- read Y first ----
+    lda SPRITE_RAM1+1,y
+    sta Q_Y
+
+    // skip parked/uninitialised
+    lda Q_Y
+    beq !nextSprite+
+    cmp #$01
+    beq !nextSprite+
+
+    // ---- read rest ----
+    lda SPRITE_RAM1+0,y
+    sta Q_ATTR_RAW
+	
+	and #%11000000
+	sta Q_FLIPBITS		// keep bits 6/7 (flip flags)
+	
+	lda Q_ATTR_RAW
+    and #%00111111
+    sta Q_ATTR
+
+	/* Sprite RAM 2 reads */
+    lda SPRITE_RAM2+0,y // X
+    sta Q_X
+    lda SPRITE_RAM2+1,y // TILE
+    sta Q_TILE
+	
+	lda SpriteQueueCount // gets current count
+	asl						// destOff = count * 4. multuply by 2 bytes to get corresponding index
+	asl
+	tax						// use as index
+	
+    // queue at entry - 4 bytes 000
+    lda Q_Y
+    sta SpriteQueueData+0,x
+    lda Q_X
+    sta SpriteQueueData+1,x
+    lda Q_TILE
+    sta SpriteQueueData+2,x
+    lda Q_ATTR
+    sta SpriteQueueData+3,x
+	inc SpriteQueueCount
+
+!nextSprite:
+	inc Q_IDX
+	jmp !loop-
+
+!done:
+    rts
+
+
+ComputeBase8FromSprite16:
+
+    ldx Q_TILE
+    lda RowBaseLo,x
+    sta TLo
+
+    lda RowBaseHi,x
+    sta THi
+
+    lda Q_ATTR
+    and #1
+    beq !+
+
+    // add 32*32 = 1024 = $0400
+    clc
+    lda TLo
+    adc #$00
+    sta TLo
+    lda THi
+    adc #$04
+    sta THi
+!:
+
+    lda Q_TILE
+    and #7
+    asl
+    clc
+    adc TLo
+    sta TLo
+    bcc !+
+    inc THi
+!:
+    rts
+
+
+
+/*
+// ------------------------------------------------------------
+// ComputeBase8FromSprite16
+// IN:  Q_TILE, Q_ATTR (bit0 is msb of sprite16)
+// OUT: THi:TLo = base8 (8x8 tile index of TL)
+// Clobbers: A, X
+// ------------------------------------------------------------
+ComputeBase8FromSprite16:
+    // sprite16 = (Q_ATTR&1)<<8 | Q_TILE  -> THi:TLo
+    lda Q_TILE
+    sta TLo
+    lda Q_ATTR
+    and #$01
+    sta THi
+
+    // col = sprite16 & 7  (save in X)
+    lda TLo
+    and #$07
+    tax                 // X = col 0..7
+
+    // row = sprite16 >> 3  (shift THi:TLo right 3)
+    lsr THi
+    ror TLo
+    lsr THi
+    ror TLo
+    lsr THi
+    ror TLo             // now TLo=row, THi=0
+
+    // base = row * 32  (<<5)  -- THi already 0, no need to clear
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi             // THi:TLo = row*32
+
+    // + col*2
+    txa                 // A = col
+    asl                 // A = col*2
+    clc
+    adc TLo
+    sta TLo
+    bcc !+
+    inc THi
+!:   rts
+
+
+
+ComputeBase8FromSprite16:
+    // sprite16 = (Q_ATTR&1)<<8 | Q_TILE  -> THi:TLo
+    lda Q_TILE
+    sta TLo
+    lda Q_ATTR
+    and #$01
+    sta THi
+
+    // col = sprite16 & 7  (save)
+    lda TLo
+    and #$07
+    sta Q_TMP          // col 0..7
+
+    // row = sprite16 >> 3  (shift THi:TLo right 3)
+    lsr THi
+    ror TLo
+    lsr THi
+    ror TLo
+    lsr THi
+    ror TLo            // now TLo=row, THi=0
+
+    // base = row * 32  (<<5)
+    lda #0
+    sta THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi
+    asl TLo
+    rol THi            // THi:TLo = row*32
+
+    // + col*2
+    lda Q_TMP
+    asl                // col*2
+    clc
+    adc TLo
+    sta TLo
+    bcc !+
+    inc THi
+!:
+    rts
+*/
+
+RRB_BuildRow:
+    // ---------------------------------------------
+    // init counters
+    // ---------------------------------------------
+    lda #0
+    sta RowCount
+   
+    // ---------------------------------------------
+    // single pass: build compact RowOrder[]
+    // ---------------------------------------------
+    ldx #0
+!scanAll:
+    cpx PixieCount
+    beq !scanDone+
+
+    lda PixieActive,x
+    beq !nextPixie+
+
+    lda PixieRow,x
+    cmp CurrentRow
+    bne !nextPixie+
+
+    // match: store pixie index in RowOrder[RowCount]
+    ldy RowCount
+    txa
+    sta RowOrder,y
+
+    inc RowCount
+    inc RRB_NeededThisRow
+
+!nextPixie:
+    inx
+    bne !scanAll-
+!scanDone:
+
+    // ---------------------------------------------
+    // clamp RowCount to RRB_PixiesPerRow (37)
+    // (RRB_NeededThisRow keeps full count for stats)
+    // ---------------------------------------------
+    lda RowCount
+    cmp #RRB_PixiesPerRow
+    bcc !noClamp+
+    lda #RRB_PixiesPerRow
+    sta RowCount
+	lda #0
+	sta RRB_NeededThisRow
+	
+!noClamp:
+
+    // ---------------------------------------------
+    // insertion sort RowOrder[0..RowCount-1] by PixieXLo
+    // ---------------------------------------------
+    ldx #1                  // i = 1
+!sortOuter:
+    cpx RowCount
+    bcs !sortDone+          // i >= RowCount -> done
+
+    stx SORT_I
+
+    ldy RowOrder,x           // keyIndex = RowOrder[i]
+    sty Q_TMP               // save keyIndex
+
+    lda PixieXLo,y
+    sta KEY_X                // keyX = PixieXLo[keyIndex]
+
+    dex                     // j = i - 1
+!sortInner:
+    bmi !insertKey+         // j < 0 -> insert at 0
+
+    ldy RowOrder,x           // candidate index
+    lda PixieXLo,y
+    cmp KEY_X                // candidateX ? keyX
+    bcc !insertKey+         // candidateX <= keyX -> stop shifting
+
+    // shift RowOrder[j] -> RowOrder[j+1]
+    lda RowOrder,x
+    sta RowOrder+1,x
+
+    dex
+    jmp !sortInner-
+!insertKey:
+    inx                     // j+1
+    ldy Q_TMP               // keyIndex
+    sty RowOrder,x           // RowOrder[j+1] = keyIndex
+
+    ldx SORT_I                // restore i
+    inx                     // i++
+    jmp !sortOuter-
+!sortDone:
+
+    
+    // ---------------------------------------------
+    // Emit tail for this row
+    // byte_0/1   = screen tail pointer
+    // COLPTR0..3 = colour tail pointer
+    // RowCount   = number of pixies to emit (<= 37)
+    // RowOrder[]  = sorted pixie indices
+    // ---------------------------------------------
+    ldy #0
+    ldz #0
+    ldx #0                  // slot index 0..RowCount-1
+
+!emitLoop:
+    cpx RowCount
+    lbeq !emitFinal+
+
+    stx P_IDX               // save slot index
+
+    // X = pixie index for this slot
+    lda RowOrder,x
+    tax
+
+    // -------- colour for THIS pixie (X = pixie index) --------
+    lda #$98
+    sta ((COLPTR0)),z
+    inz
+    lda PixieMask,x
+    sta ((COLPTR0)),z
+    inz
+    lda #0
+    sta ((COLPTR0)),z
+    inz
+    sta ((COLPTR0)),z
+    inz
+    lda #$10
+    sta ((COLPTR0)),z
+    inz
+    lda #0
+    sta ((COLPTR0)),z
+    inz
+
+    // -------- screen for THIS pixie (X = pixie index) --------
+    lda PixieXLo,x
+    sta (byte_0),y
+    iny
+    lda PixieXHi,x
+    sta (byte_0),y
+    iny
+    lda PixieTileLo,x
+    sta (byte_0),y
+    iny
+    lda PixieTileHi,x
+    sta (byte_0),y
+    iny
+
+    // gotoX = next pixie X else 320
+    ldx P_IDX
+    inx
+    cpx RowCount
+    beq !lastPixie+
+
+    lda RowOrder,x
+    tax
+
+    lda PixieXLo,x
+    sta (byte_0),y
+    iny
+
+    lda PixieXHi,x
+    and #$03
+    sta (byte_0),y
+    iny
+
+    jmp !afterGoto+
+
+!lastPixie:
+    lda #<320
+    sta (byte_0),y
+    iny
+    lda #>320
+    sta (byte_0),y
+    iny
+
+!afterGoto:
+    ldx P_IDX
+    inx
+    jmp !emitLoop-
+
+!emitFinal:
+    // -------------------------------------------------
+    // pad remaining slots up to RRB_PixiesPerRow
+    // NOTE: X currently = slot index (RowCount..)
+    // -------------------------------------------------
+!padLoop:
+    cpx #RRB_PixiesPerRow
+    lbeq !writeFinal+
+
+    // screen prototype (6 bytes)
+    lda RRB_PixieProtoType+0
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+1
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+2
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+3
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+4
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+5
+    sta (byte_0),y
+    iny
+
+    // colour prototype (6 bytes)
+    lda RRB_ColorProtoType+0
+    sta ((COLPTR0)),z
+    inz
+    lda RRB_ColorProtoType+1
+    sta ((COLPTR0)),z
+    inz
+    lda RRB_ColorProtoType+2
+    sta ((COLPTR0)),z
+    inz
+    lda RRB_ColorProtoType+3
+    sta ((COLPTR0)),z
+    inz
+    lda RRB_ColorProtoType+4
+    sta ((COLPTR0)),z
+    inz
+    lda RRB_ColorProtoType+5
+    sta ((COLPTR0)),z
+    inz
+
+    inx
+    jmp !padLoop-
+
+!writeFinal:
+    // -------------------------------------------------
+    // final screen words (EOL + dummy tile)
+    // -------------------------------------------------
+    lda #<320
+    sta (byte_0),y
+    iny
+    lda #>320
+    sta (byte_0),y
+    iny
+
+    lda RRB_PixieProtoType+2     // dummy tile lo (match your prototype)
+    sta (byte_0),y
+    iny
+    lda RRB_PixieProtoType+3     // dummy tile hi
+    sta (byte_0),y
+    iny
+
+    // -------------------------------------------------
+    // final colour words (goto ctrl + dummy attrs)
+    // -------------------------------------------------
+    lda #$90
+    sta ((COLPTR0)),z
+    inz
+    lda #0
+    sta ((COLPTR0)),z
+    inz
+
+    lda #0
+    sta ((COLPTR0)),z
+    inz
+    sta ((COLPTR0)),z
+    rts
+
+
+
+RRB_BuildAllRows:
+    lda #0
+    sta CurrentRow
+
+    // init screen pointer to row 0
+    lda #<SCREEN_BASE
+    sta byte_0
+    lda #>SCREEN_BASE
+    sta byte_1
+
+    // init colour pointer to row 0
+    lda #<COLOR_RAM
+    sta COLPTR0
+    lda #>COLOR_RAM
+    sta COLPTR1
+    lda #((COLOR_RAM >> 16) & $ff)
+    sta COLPTR2
+    lda #((COLOR_RAM >> 24) & $ff)
+    sta COLPTR3
+
+!rowLoop:
+    lda CurrentRow
+    cmp #CHARS_HIGH
+    lbeq !done+
+
+    // ---- advance screen pointer to tail start ----
+    clc
+    lda byte_0
+    adc #<TAIL_OFF
+    sta byte_0
+    lda byte_1
+    adc #>TAIL_OFF
+    sta byte_1
+
+    // ---- advance color pointer to tail start ----
+    clc
+    lda COLPTR0
+    adc #<TAIL_OFF
+    sta COLPTR0
+    lda COLPTR1
+    adc #>TAIL_OFF
+    sta COLPTR1
+    bcc !+
+    inc COLPTR2
+    bne !+
+    inc COLPTR3
+!:
+
+	
+    // --------- NEW: only build rows matching phase ----------
+    lda CurrentRow
+    and #1
+    cmp RRB_FramePhase
+    bne !skipBuild+
+
+    jsr RRB_BuildRow
+
+!skipBuild:
+    // --------- restore row base (undo TAIL_OFF) -------------
+    sec
+    lda byte_0
+    sbc #<TAIL_OFF
+    sta byte_0
+    lda byte_1
+    sbc #>TAIL_OFF
+    sta byte_1
+
+    sec
+    lda COLPTR0
+    sbc #<TAIL_OFF
+    sta COLPTR0
+    lda COLPTR1
+    sbc #>TAIL_OFF
+    sta COLPTR1
+    bcs !+
+    dec COLPTR2
+    bne !+
+    dec COLPTR3
+!:
+
+    // --------- advance to next row --------------------------
+    clc
+    lda byte_0
+    adc #<LINESTEP_BYTES
+    sta byte_0
+    lda byte_1
+    adc #>LINESTEP_BYTES
+    sta byte_1
+
+    clc
+    lda COLPTR0
+    adc #<LINESTEP_BYTES
+    sta COLPTR0
+    lda COLPTR1
+    adc #>LINESTEP_BYTES
+    sta COLPTR1
+    bcc !+
+    inc COLPTR2
+    bne !+
+    inc COLPTR3
+!:
+
+    inc CurrentRow
+    jmp !rowLoop-
+
+!done:
+    jsr RRB_ClearUsedMarks
+    rts
+
+
+	
+RRB_ClearUsedMarks:
+    ldx #0
+!:
+    cpx PixieCount
+    beq !done+
+    lda PixieActive,x
+    and #$7F
+    sta PixieActive,x
+    inx
+    jmp !-
+!done:
+    rts
+
+
+// ============================================================
+// BuildPixieListFromSpriteQueue
+// Correct for tilesheet layout:
+//   [TL][BL]
+//   [TR][BR]
+//
+// Tile offsets:
+//   TL = base + 0
+//   BL = base + 1
+//   TR = base + 16
+//   BR = base + 17
+//
+// No diagonal swap in code — tilesheet already rearranged.
+// ============================================================
+
+BuildPixieListFromSpriteQueue:
+
+	/* Clear our variables */
+    lda #0
+    sta PixieCount
+    sta P_IDX
     sta Q_IDX
 
-!spriteLoop:
+!loop:
     lda Q_IDX
     cmp SpriteQueueCount
     lbeq !done+
 
     // qOff = Q_IDX * 4
-    lda Q_IDX
+    //lda Q_IDX
     asl
     asl
     tay
 
-    // Load queue entry
+    // ------------------------------------------------------------
+    // Load queue entry (arcade Y is inverted)
+    // ------------------------------------------------------------
     lda SpriteQueueData+0,y
     sta Q_Y
     lda SpriteQueueData+1,y
@@ -65,482 +793,500 @@ BuildPixieBucketsFromSpriteQueue:
     lda SpriteQueueData+3,y
     sta Q_ATTR
 
-    // ------------------------------------------------------------
-    // byte_0/byte_1 = SCREEN_BASE + Q_IDX*LINESTEP_BYTES + (CHARS_WIDE*2)
-    // (Q_IDX selects the Pixie row slot: row0=row0 sprite, row1=row1 sprite...)
-    // ------------------------------------------------------------
-    lda #<SCREEN_BASE
-    sta byte_0
-    lda #>SCREEN_BASE
-    sta byte_1
-
-    ldx Q_IDX
-    beq !rowAdded+
-
-!addStride:
-    clc
-    lda byte_0
-    adc #<LINESTEP_BYTES
-    sta byte_0
-    lda byte_1
-    adc #>LINESTEP_BYTES
-    sta byte_1
-    dex
-    bne !addStride-
-
-!rowAdded:
-    clc
-    lda byte_0
-    adc #<(CHARS_WIDE * 2)
-    sta byte_0
-    lda byte_1
-    adc #>(CHARS_WIDE * 2)
-    sta byte_1
-
-    // ------------------------------------------------------------
-    // Use THIS ONE Pixie row for THIS ONE arcade sprite.
-    // 4 pixies in the same row.
-    // For now: pixie2/3 overlap 0/1 (acceptable per your request).
-    // ------------------------------------------------------------
-
-    // Pixie 0 (TL)
 	
-    WRITE_GOTOX(0, 0)
-    WRITE_PIXIE_TILE(0, 0)
-    //WRITE_GOTOX_END(4)
-
-    // Pixie 1 (TR)
-    WRITE_GOTOX(6, 8)
-    WRITE_PIXIE_TILE(6, 1)
-    //WRITE_GOTOX_END(10)
-	
-	// move down one pixie bucket row (Y + 8), this is for testing only.
+	/* Invert Y, arcade coordinates are inverted
+		yinv = (~Y)+1
+	*/
+	lda Q_Y
+	eor #$ff
 	clc
-	lda byte_0
-	adc #<LINESTEP_BYTES
-	sta byte_0
-	lda byte_1
-	adc #>LINESTEP_BYTES
-	sta byte_1
-
-    // Pixie 2 (BL)
-    WRITE_GOTOX(12, 0)          // or 16 if you want 4-wide
-    //WRITE_PIXIE_TILE(12, 2)
-	WRITE_PIXIE_TILE(12, SPR_TILE_STRIDE)
-    //WRITE_GOTOX_END(16)
-
-    // Pixie 3 (BR)
-    WRITE_GOTOX(18, 8)
-    //WRITE_PIXIE_TILE(18, 3)
-    WRITE_PIXIE_TILE(18, SPR_TILE_STRIDE+1) 
-    WRITE_GOTOX_END(22)
+	adc #1
+	sta Q_TMP
 	
 	
-
-    inc Q_IDX
-    jmp !spriteLoop-
-
-!done:
-    rts
-
-BuildSpriteQueueFromArcadeRAM:
-    lda #0
-    sta SpriteQueueCount
-    sta Q_IDX                 // spriteIndex = 0
-
-!loop:
-    lda Q_IDX
-    cmp #SPRITE_MAX
-    beq !done+
-
-    // srcOff = spriteIndex * 2
-    lda Q_IDX
-    asl
-    tay
-
-    // ---- skip parked sprites (arcade convention) ----
-    //lda SPRITE_RAM1+1,y       // arcade Y
-    //cmp #$01
-    //beq !nextSprite+
+	/* apply bias */
+	sec
+	lda Q_TMP
+	sbc #Y_BIAS
+	sta Q_TMP
 	
-	
-	/* Sprite RAM 1 reads */
-	// ---- read Y first ----
-    lda SPRITE_RAM1+1,y       // Y byte (pair: [ATTR,Y])
-    sta Q_Y
-	
-	//---- skip uninitialized/parked ----
-    // Your RAM shows Y=$01 for uninit and also many $00's.
-    lda Q_Y
-    beq !nextSprite+          // Y==0 => invalid/uninitialized, may need to remove this later.
-    cmp #$01
-    beq !nextSprite+          // Y==1 => parked/uninitialized
-	
-	// ---- read the rest ----
-	lda SPRITE_RAM1+0,y         // arcade ATTR
-    sta Q_ATTR_RAW              // keep full byte for later use if needed
-
-    and #%11000000
-    sta Q_FLIPBITS              // keep bits 6/7 (flip flags)
-
-    lda Q_ATTR_RAW
-    and #%00111111              // clear bits 6/7, keep bit0 and other low bits
-    sta Q_ATTR		   			// queue attr: bit0 preserved, flips removed
-	
-	/* Sprite RAM 2 reads */
-    lda SPRITE_RAM2+0,y       // X
-    sta Q_X
-    lda SPRITE_RAM2+1,y       // TILE
-    sta Q_TILE
-	
-	// ---- optional extra sanity: skip the exact uninit signature ----
-    // If your RAM2 looks like 00 01 repeating too, this will drop it:
-    // uninit signature: ATTR=0, X=0, TILE=1, Y=1 (already excluded by Y==1)
-    // also exclude the all-zero signature:
-    lda Q_ATTR
-    ora Q_X
-    ora Q_TILE
-    ora Q_Y
-    beq !nextSprite+          // all four are 0 => invalid
-
-	// ---- destOff = count * 4 ----
-    lda SpriteQueueCount		// gets current count
-    asl							// multiply by 2 bytes to get corresponding index
-    asl
-    tax							// use as index.
-
-    // ---- store queue entry ----
-    lda Q_Y
-    sta SpriteQueueData+0,x	// Store Y Position in Queue
-    lda Q_X
-    sta SpriteQueueData+1,x	// Store X Position in Queue
-    
-	lda Q_TILE
-    sta SpriteQueueData+2,x	// Store Tile index in Queue
-    lda Q_ATTR
-    sta SpriteQueueData+3,x	// Store Stripped Attribute Data
-	
-	
-	//--- TEST: force arcade index $1E0 ---
-    /*lda #$f4
-    sta SpriteQueueData+2,x
-    lda #$01
-    sta SpriteQueueData+3,x*/
-
-    inc SpriteQueueCount
-
-!nextSprite:
-    inc Q_IDX
-    jmp !loop-
-
-!done:
-    rts
-
-	
-// Parks all 24 sprite buckets off-screen by writing Y=$01 into raster-lo
-// for the 4 pixies in each bucket row tail.
-//
-// Uses: Q_IDX, byte_0, byte_1. Clobbers A,X,Y.
-
-ParkAllPixieBuckets:
-    lda #0
-    sta Q_IDX
-
-!loop:
-    lda Q_IDX
-    cmp #SPRITE_MAX
-    beq !done+
-
-    // byte_0/1 = SCREEN_BASE
-    lda #<SCREEN_BASE
-    sta byte_0
-    lda #>SCREEN_BASE
-    sta byte_1
-
-    // advance by Q_IDX rows
-    ldx Q_IDX
-    beq !rowAdded+
-
-!addStride:
-    clc
-    lda byte_0
-    adc #<LINESTEP_BYTES
-    sta byte_0
-    lda byte_1
-    adc #>LINESTEP_BYTES
-    sta byte_1
-    dex
-    bne !addStride-
-
-!rowAdded:
-    // + CHARS_WIDE*2 column offset
-    clc
-    lda byte_0
-    adc #<(CHARS_WIDE * 2)
-    sta byte_0
-    lda byte_1
-    adc #>(CHARS_WIDE * 2)
-    sta byte_1
-
-    // raster X = $FF for all 4 pixies
-    lda #$ff
-    ldy #0
-    sta (byte_0),y
-    ldy #6
-    sta (byte_0),y
-    ldy #12
-    sta (byte_0),y
-    ldy #18
-    sta (byte_0),y
-
-    // disable gotox by clearing BOTH start+resume hi bytes
-    lda #0
-    // start hi
-    ldy #1
-    sta (byte_0),y
-    ldy #7
-    sta (byte_0),y
-    ldy #13
-    sta (byte_0),y
-    ldy #19
-    sta (byte_0),y
-    // resume hi
-    ldy #5
-    sta (byte_0),y
-    ldy #11
-    sta (byte_0),y
-    ldy #17
-    sta (byte_0),y
-    ldy #23
-    sta (byte_0),y
-
-    inc Q_IDX
-    jmp !loop-
-
-!done:
-    rts
-
-
-/*
-.macro WRITE_PIXIE_TILE(pixieBaseOfs, delta) {
-    // --- build base = SPR_TILE_BASE + Q_TILE + delta ---
-    clc
-    lda Q_TILE
-    adc #delta
-    adc #<SPR_TILE_BASE
-    sta TLo
-
-    lda Q_ATTR
-    and #$01
-    adc #>SPR_TILE_BASE      // includes carry from low-byte add
-    sta THi
-
-    // --- add TILE_OFFSET ---
-    clc
-    lda TLo
-    adc #<TILE_OFFSET
-    ldy #pixieBaseOfs+2
-    sta (byte_0),y
-
-    lda THi
-    adc #>TILE_OFFSET
-    iny
-    sta (byte_0),y
-}*/
-/*
-	lda RRB_PixieProtoType+2
-    clc
-    adc #<TILE_OFFSET
-    sta (byte_0),y
-    iny
-    lda RRB_PixieProtoType+3
-    clc
-    adc #>TILE_OFFSET
-    sta (byte_0),y
-    iny
-*/
-
-.macro WRITE_PIXIE_TILE(pixieBaseOfs, delta) {
-	
-	// ------------------------------------------------------------
-	// Convert arcade 16x16 sprite index to MEGA65 8x8 tile index
-	//
-	// Arcade sprites are 16x16 pixels.
-	// MEGA65 pixies are 8x8 tiles.
-	//
-	// The sprite sheet is laid out as a 2D grid of 8x8 tiles:
-	//   - 16 tiles wide in 8x8 units
-	//   - therefore 8 sprites per row (each sprite is 2 tiles wide)
-	//
-	// Arcade provides a 9-bit sprite index:
-	//   sprite16 = (Q_ATTR bit0) << 8 | Q_TILE
-	//
-	// This sprite index counts 16x16 sprites linearly:
-	//   sprite16 = 0, 1, 2, 3, ...
-	//
-	// But because the sheet is 2D-packed, the top-left 8x8 tile
-	// of a sprite is NOT at sprite16 * 4.
-	//
-	// Instead:
-	//   col = sprite16 & 7          ; which sprite column (0..7)
-	//   row = sprite16 >> 3         ; which sprite row
-	//
-	// Each sprite row occupies:
-	//   2 rows of 8x8 tiles
-	//   => 2 * SPR_TILE_STRIDE = 32 tiles per sprite row
-	//
-	// Each sprite column advances by:
-	//   2 tiles horizontally
-	//
-	// Therefore:
-	//   base8 = row * 32 + col * 2
-	//
-	// Result:
-	//   THi:TLo = base8
-	//   (8x8 tile index of the TOP-LEFT subtile of the 16x16 sprite)
-	//
-	// From this base index, subtiles are addressed as:
-	//   TL = base8 + 0
-	//   TR = base8 + 1
-	//   BL = base8 + SPR_TILE_STRIDE      (+16)
-	//   BR = base8 + SPR_TILE_STRIDE + 1  (+17)
-	// ------------------------------------------------------------
-
-
-    // Build 16-bit sprite16 index into THi:TLo
-    lda Q_TILE
-    sta TLo			// Load the low byte of the 16×16 sprite index into TLo.
-    lda Q_ATTR 	// Extract bit0 of Q_ATTR (the arcade MSB of the sprite index).
-    and #$01
-    sta THi			// THi:TLo = 9-bit sprite16 (0..511)
-
-
-	/* col = sprite16 & 7  (save it)
-	spritesPerRow = 8, so the column within the row is the low 3 bits.
-	col = sprite16 % 8
-	Save col for later (we’ll need col*2). */
-	lda TLo
+	/* Fine Y */
+	lda Q_TMP
 	and #$07
-	sta Q_YME          // scratch (0..7)
+	sta Q_YSUB
+	
+	lda Q_YSUB
+    asl
+    asl
+    asl
+    asl
+    asl
+    sta Q_YSUB5        // fine-y bits 5..7
+	
+	/* Coarse row */
+	lda Q_TMP
+	lsr
+	lsr
+	lsr
+	sta Q_ROW			// index for coarse row.
+	
+    // compute base8 tile index
+    jsr ComputeBase8FromSprite16
 
-	/* row = sprite16 >> 3  (TLo becomes row)
-	
-	This shifts the 9-bit value THi:TLo right by 3 bits.
-	After these 3 lsr/ror pairs:
-		TLo = sprite16 / 8 (integer divide)
-		THi becomes 0 (because the original value was only 9 bits)
-		
-		So now
-		row = sprite16 >> 3
-	*/
-	lsr THi
-	ror TLo
-	lsr THi
-	ror TLo
-	lsr THi
-	ror TLo            // now TLo=row, THi=0
+	// Draw the pixies.
+    lda Q_ROW
+    cmp #(CHARS_HIGH-2)
+    bcs !next+
 
-	/* base8 = row * 32  (<<5)
-	Shift left 5 times (<< 5) to multiply by 32.
-	Why 32?
-	Each 16×16 sprite occupies 2 rows of 8×8 tiles.
-	Each 8×8 row is SPR_TILE_STRIDE = 16 tiles wide.
-	So one sprite row consumes 2 * 16 = 32 tiles in the 8×8 tile index space.
-	*/
-	
-	lda #0
-	sta THi			   // Clear THi explicitly so THi:TLo is a clean 16-bit number holding row.
-	asl TLo
-	rol THi
-	asl TLo
-	rol THi
-	asl TLo
-	rol THi
-	asl TLo
-	rol THi
-	asl TLo
-	rol THi            // THi:TLo = row*32
+    lda P_IDX
+    cmp #(PIXIE_MAX-8)
+    bcs !next+
 
-	/* add col*2
-	Each sprite is 2 tiles wide, so moving one sprite to the right means +2 tiles.
-	So col*2 gives the horizontal offset in 8×8 tiles.
-	*/
-	lda Q_YME
-	asl                // *2
-	
-	/*
-	Add col*2 to the low byte.
-	*/
-	
-	clc
-	adc TLo
-	sta TLo
-	
-	/*
-	If the low-byte addition overflowed, increment the high byte.
-	At this point:
-	THi:TLo = row*32 + col*2
-	This is base8, the top-left 8×8 tile index for the given arcade 16×16 sprite index.
-	*/
-	bcc !noCarry+
-	inc THi
-	!noCarry:
-	// result: THi:TLo = base8 (top-left 8x8 tile index)
+    // load masks
+    ldy Q_YSUB
+    lda TopMask,y
+    sta Q_TOP
+    lda BotMask,y
+    sta Q_BOT
 
+    jsr Emit_TL_R_top
+    jsr Emit_TR_R_top
 	
+    jsr Emit_TL_R1_bot
+    jsr Emit_TR_R1_bot
 
-	// low byte
+	jsr Emit_BL_R1_top
+    jsr Emit_BR_R1_top
+	
+    jsr Emit_BL_R2_bot
+    jsr Emit_BR_R2_bot
+	
+!next:
+    inc Q_IDX
+    jmp !loop-
+
+!done:
+    rts
+	
+	
+// ------------------------------------------------------------
+// StoreTile_TL  (tile = base + 0)
+// ------------------------------------------------------------
+StoreTile_TL:
+
     clc
     lda #<TILE_OFFSET
     adc #<SPR_TILE_BASE
     adc TLo
-    adc #delta
-    ldy #pixieBaseOfs+2
-    sta (byte_0),y
+    sta PixieTileLo,x
 
-    // capture carry from low-byte chain (0/1)
     lda #0
     adc #0
-    sta Q_YME
+    sta Q_CARRY
 
-    // high byte
     clc
     lda #>TILE_OFFSET
     adc #>SPR_TILE_BASE
     adc THi
-    adc Q_YME
-    iny
-    sta (byte_0),y
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
+
+
+// ------------------------------------------------------------
+// StoreTile_BL  (tile = base + 1)
+// ------------------------------------------------------------
+StoreTile_BL:
+    clc
+    lda #<TILE_OFFSET
+    adc #<SPR_TILE_BASE
+    adc TLo
+    adc #1
+    sta PixieTileLo,x
+
+    lda #0
+    adc #0
+    sta Q_CARRY
+
+    clc
+    lda #>TILE_OFFSET
+    adc #>SPR_TILE_BASE
+    adc THi
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
+
+
+// ------------------------------------------------------------
+// StoreTile_TR  (tile = base + 16)
+// ------------------------------------------------------------
+StoreTile_TR:
+    clc
+    lda #<TILE_OFFSET
+    adc #<SPR_TILE_BASE
+    adc TLo
+    adc #<SPR_TILE_STRIDE      // +16
+    sta PixieTileLo,x
+
+    lda #0
+    adc #0
+    sta Q_CARRY
+
+    clc
+    lda #>TILE_OFFSET
+    adc #>SPR_TILE_BASE
+    adc THi
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
+
+
+// ------------------------------------------------------------
+// StoreTile_BR  (tile = base + 17)
+// ------------------------------------------------------------
+StoreTile_BR:
+    clc
+    lda #<TILE_OFFSET
+    adc #<SPR_TILE_BASE
+    adc TLo
+    adc #<SPR_TILE_STRIDE+1      // +17
+   
+    sta PixieTileLo,x
+
+    lda #0
+    adc #0
+    sta Q_CARRY
+
+    clc
+    lda #>TILE_OFFSET
+    adc #>SPR_TILE_BASE
+    adc THi
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
 	
-}
+	
+// ------------------------------------------------------------
+// StoreTile_BL  (tile = base + 2)
+// ------------------------------------------------------------
+StoreTile_B1:
+    clc
+    lda #<TILE_OFFSET
+    adc #<SPR_TILE_BASE
+    adc TLo
+    adc #2
+    sta PixieTileLo,x
+
+    lda #0
+    adc #0
+    sta Q_CARRY
+
+    clc
+    lda #>TILE_OFFSET
+    adc #>SPR_TILE_BASE
+    adc THi
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
+	
+	
+// ------------------------------------------------------------
+// StoreTile_B2  (tile = base + 18)
+// ------------------------------------------------------------
+StoreTile_B2:
+    clc
+    lda #<TILE_OFFSET
+    adc #<SPR_TILE_BASE
+    adc TLo
+    adc #<SPR_TILE_STRIDE+2      // +18
+   
+    sta PixieTileLo,x
+
+    lda #0
+    adc #0
+    sta Q_CARRY
+
+    clc
+    lda #>TILE_OFFSET
+    adc #>SPR_TILE_BASE
+    adc THi
+    adc Q_CARRY
+    sta PixieTileHi,x
+    rts
+
+	
+// ------------------------------------------------------------
+// Emit TL @ row R, topmask
+// ------------------------------------------------------------
+Emit_TL_R_top:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+	lda Q_ROW
+	sta PixieRow,x
+	lda Q_X
+	sta PixieXLo,x
+
+	lda #FCM_YOFFS_DIR
+	ora Q_YSUB5
+	sta PixieXHi,x
+
+	lda Q_TOP                    // TopMask[sub]
+	sta PixieMask,x
+	jsr StoreTile_TL
+	inc P_IDX
+	inc PixieCount
+	rts
 
 
-.macro WRITE_GOTOX(pixieBaseOfs, add) {
-    ldy #pixieBaseOfs
+// ------------------------------------------------------------
+// Emit TR @ row R, topmask
+// ------------------------------------------------------------
+Emit_TR_R_top:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+	lda Q_ROW
+	sta PixieRow,x
 
-    // low byte
+	clc
+	lda Q_X
+	adc #8
+	sta PixieXLo,x
+
+	lda #0
+	adc #0
+	and #$03
+	ora #FCM_YOFFS_DIR
+	ora Q_YSUB5
+	sta PixieXHi,x
+
+	lda Q_TOP                   // TopMask[sub]
+	sta PixieMask,x
+	jsr StoreTile_TR
+	inc P_IDX
+	inc PixieCount
+	rts
+	
+// ------------------------------------------------------------
+// Emit TL @ row R+1, botmask
+// ------------------------------------------------------------
+Emit_TL_R1_bot:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+	lda Q_ROW
+	clc
+	adc #1
+	sta PixieRow,x
+
+	lda Q_X
+	sta PixieXLo,x
+	lda #FCM_YOFFS_DIR  
+	ora Q_YSUB5
+	sta PixieXHi,x
+	lda Q_BOT
+	sta PixieMask,x
+
+	jsr StoreTile_BL
+	inc P_IDX
+	inc PixieCount
+	rts
+
+
+// ------------------------------------------------------------
+// Emit TR @ row R+1, botmask
+// ------------------------------------------------------------
+Emit_TR_R1_bot:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+	lda Q_ROW
+	clc
+	adc #1
+	sta PixieRow,x
+
+	clc
+	lda Q_X
+	adc #8
+	sta PixieXLo,x
+
+	lda #0
+	adc #0
+	and #3
+	ora #FCM_YOFFS_DIR
+	ora Q_YSUB5
+	sta PixieXHi,x
+
+	lda Q_BOT
+	sta PixieMask,x
+
+	jsr StoreTile_BR
+	inc P_IDX
+	inc PixieCount
+	rts
+	
+// ------------------------------------------------------------
+// Emit BL @ row R+1, topmask
+// ------------------------------------------------------------
+
+Emit_BL_R1_top:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+
+	lda Q_ROW
+	clc
+	adc #1
+	sta PixieRow,x
+
+	lda Q_X
+	sta PixieXLo,x
+
+	lda #FCM_YOFFS_DIR
+	ora Q_YSUB5
+	sta PixieXHi,x
+
+	lda Q_TOP                // TopMask[sub]
+	sta PixieMask,x
+
+	jsr StoreTile_BL
+	inc P_IDX
+	inc PixieCount
+	rts
+
+
+// ------------------------------------------------------------
+// Emit BR @ row R+1, topmask
+// ------------------------------------------------------------
+Emit_BR_R1_top:
+	ldx P_IDX
+	lda #1
+	sta PixieActive,x
+	lda Q_ROW
+	clc
+	adc #1
+	sta PixieRow,x
+
+	clc
+	lda Q_X
+	adc #8
+	sta PixieXLo,x
+
+	lda #0
+	adc #0
+	and #$03
+	ora #FCM_YOFFS_DIR
+	ora Q_YSUB5
+	sta PixieXHi,x
+
+	lda Q_TOP
+	sta PixieMask,x
+
+	jsr StoreTile_BR
+	inc P_IDX
+	inc PixieCount
+	rts
+	
+// ------------------------------------------------------------
+// Emit BL @ row R+2, botmask
+// ------------------------------------------------------------
+Emit_BL_R2_bot:
+    ldx P_IDX
+    lda #1
+    sta PixieActive,x
+
+    lda Q_ROW
+    clc
+    adc #2
+    sta PixieRow,x
+
+    lda Q_X
+    sta PixieXLo,x
+
+    lda #FCM_YOFFS_DIR
+    ora Q_YSUB5
+    sta PixieXHi,x
+
+    lda Q_BOT
+    sta PixieMask,x
+
+    jsr StoreTile_B1   // <-- NOT BL
+    inc P_IDX
+    inc PixieCount
+    rts
+
+// ------------------------------------------------------------
+// Emit BR @ row R+2, botmask
+// ------------------------------------------------------------
+Emit_BR_R2_bot:
+    ldx P_IDX
+    lda #1
+    sta PixieActive,x
+
+    lda Q_ROW
+    clc
+    adc #2
+    sta PixieRow,x
+
     clc
     lda Q_X
-    adc #add
-    sta (byte_0),y
-    iny
+    adc #8
+    sta PixieXLo,x
 
-    // high byte = (Q_ATTR bit0) + carry from low-byte add
-    lda #$00 //Q_ATTR
-    and #$01
-    adc #$00
-    sta (byte_0),y
-}
+    lda #0
+    adc #0
+    and #3
+    ora #FCM_YOFFS_DIR
+    ora Q_YSUB5
+    sta PixieXHi,x
 
-.macro WRITE_GOTOX_END(pixieBaseOfs) {
-    ldy #pixieBaseOfs
-    lda #$ff
-    sta (byte_0),y
-    iny
-    lda #$00
-    sta (byte_0),y
-}
+    lda Q_BOT
+    sta PixieMask,x
 
-RowSpriteCount:
-    .fill SPRITE_MAX, 0
+    jsr StoreTile_B2   // <-- NOT BR
+    inc P_IDX
+    inc PixieCount
+    rts
 
+RRB_FramePhase:		.byte 0    // 0 or 1
+RRB_NeededThisRow:	.byte 0    // temp for current row
+RowCount:			.byte 0
+PixieCount:			.byte 0
+PixieActive:			.fill PIXIE_MAX, 0   // 1=active
+PixieRow:				.fill PIXIE_MAX, 0   // coarse row 0..31
+PixieXLo:				.fill PIXIE_MAX, 0
+PixieXHi:				.fill PIXIE_MAX, 0   // only bits0-1 used
+PixieTileLo:			.fill PIXIE_MAX, 0
+PixieTileHi:			.fill PIXIE_MAX, 0
+// Temp working set for one row build
+RowOrder:				.fill RRB_PixiesPerRow, 0
+PixieMask:				.fill PIXIE_MAX,0
+RowHead:				.fill CHARS_HIGH, $ff   // head index per row
+PixieNext:				.fill PIXIE_MAX, 0      // next pointer
+
+RowBaseLo:
+    .fill 256, <(((i >> 3) * 32))
+RowBaseHi:
+    .fill 256, >(((i >> 3) * 32))
+	
+
+TopMask:
+	.byte %11111111
+	.byte %11111110
+	.byte %11111100
+	.byte %11111000
+	.byte %11110000
+	.byte %11100000
+	.byte %11000000
+	.byte %10000000
+
+BotMask:
+	.byte %00000000
+	.byte %00000001
+	.byte %00000011
+	.byte %00000111
+	.byte %00001111
+	.byte %00011111
+	.byte %00111111
+	.byte %01111111
