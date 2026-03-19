@@ -32,8 +32,7 @@ setUpDisplay:
 	sta $D05C
 	
 	// Top Border
-	//lda #$27
-	lda #$32
+	lda #$20
 	sta $D048
 	// Bottom Border
 	lda #$f1
