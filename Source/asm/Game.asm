@@ -1,6 +1,6 @@
 
 
-*=$6000 "Game Code - Game.asm"
+*=* "Game Code - Game.asm"
 
 loc_8000:
 	// byte_0 = pointer low
@@ -9,15 +9,16 @@ loc_8000:
 	// byte_3 = high byte of D (A)
 
 	// X starts at $5000
-	lda #$00
+	lda #<SPRITE_RAM1
 	sta byte_0
-	lda #$50
+	lda #>SPRITE_RAM1
 	sta byte_1
 	
 	lda #$00
 	sta byte_2
 	lda #$00
 	sta byte_3
+	ldy #0
 loc_8005:
     // store high byte (A)
     lda byte_3
@@ -40,23 +41,24 @@ loc_8005:
 
     // compare pointer to $5700
     lda byte_1
-    cmp #$57
+    cmp #>WORK_RAM2 + $2D0
     bcc loc_8005
     bne loc_800f
     lda byte_0
-    cmp #$00
+    cmp #<WORK_RAM2 + $2D0
     bcc loc_8005
 	
 loc_800f:
-	lda #$30
+	lda #<WORK_RAM1
 	sta byte_0
-	lda #$50
+	lda #>WORK_RAM1
 	sta byte_1
 	
 	lda #$00
 	sta byte_2
 	lda #$00
 	sta byte_3
+	ldy #0
 loc_8012:
 	 // store high byte (A)
     lda byte_3
@@ -79,11 +81,11 @@ loc_8012:
 
     // compare pointer to $5730
     lda byte_1
-    cmp #$57
+    cmp #>WORK_RAM2 + $300
     bcc loc_8012
     bne loc_801c
     lda byte_0
-    cmp #$30
+    cmp #<WORK_RAM2 + $300
     bcc loc_8012
 
 loc_801c:
@@ -104,7 +106,7 @@ loc_801c:
 *******************/
 loc_802e:
 	jsr	sub_8218	// draws the crosshatch
-	
+
 /***************************************
 * Sets up variables                    *
 * at 52c0, 52c2.. etc                  *
@@ -112,12 +114,12 @@ loc_802e:
 ***************************************/
 
 loc_8031:
-	lda #$c0        // low byte
+	lda #<CMD_QUEUE // low byte
     sta byte_d8
     sta byte_da
 	sta byte_f0	 // use a separate temp pointer to walk 52C0..52FE
 
-    lda #$52        // high byte
+    lda #>CMD_QUEUE // high byte
     sta byte_d9
     sta byte_db
 	sta byte_f1	 // use a separate temp pointer to walk 52C0..52FE
@@ -150,27 +152,27 @@ loc_803b:
 
     // compare pointer to $5300
     lda byte_f1
-    cmp #$53
+    cmp #>WORK_RAM1 + $2d0
     bcc loc_803b    // if < 5300, continue
     bne loc_8042    // if > 5300, stop
     lda byte_f0
-    cmp #$00
+    cmp #<WORK_RAM1 + $2d0
     bcc loc_803b    // if < 5300, continue
 loc_8042:
 	
 	// store high byte first (53), then low byte (00)
-    lda #$53
+    lda #>WORK_RAM1 + $2d0
     sta byte_dc      // $DC
     sta byte_de      // $DE
-    lda #$00
+    lda #<WORK_RAM1 + $2d0
     sta byte_dd      // $DD
     sta byte_df      // $DF
 
 	// clear word_5606+1  (i.e., $5607)
     lda #$00
-    sta $5607
+    sta WORK_RAM2 + $1d7
 	// clear word_5608 (low byte)
-    sta $5608
+    sta WORK_RAM2 + $1d8
 	// Read DIPs
 	jsr sub_80c5
 	// Sets options to flip Screen
@@ -179,17 +181,17 @@ loc_8042:
     lda byte_c3
     beq loc_8062          // if zero, skip
     // D8 = $52C0
-    lda #<$52C0
+    lda #<CMD_QUEUE
     sta byte_d8
-    lda #>$52C0
+    lda #>CMD_QUEUE
     sta byte_d9
     // store $FFFF at $52C0
     lda #$FF
-    sta $52C0
-    sta $52C1
+    sta CMD_QUEUE
+    sta CMD_QUEUE+1
     // store $FFFF at $52C2
-    sta $52C2
-    sta $52C3
+    sta CMD_QUEUE+2
+    sta CMD_QUEUE+3
 	
 	
 /**************************
@@ -202,7 +204,7 @@ loc_8042:
 
 loc_8062:
     // A = word_5600 low byte (6809 loads 16-bit, but only A is used)
-    lda $5600
+    lda SPRITE_RAM2+$200
     //jsr sub_86D7 (ROM→RAM high score copy, not needed. See)
     //jsr sub_C737 (sound/speech init) - Look at this later
     // B = 6 → A = 6
@@ -387,11 +389,11 @@ loc_80a2:
 
     // compare pointer to $5300
     lda byte_f1
-    cmp #$53
+    cmp #>WORK_RAM1 + $2d0
     bcc store_ptr        // hi < 53 → keep
     bne wrap_ptr         // hi > 53 → wrap
     lda byte_f0
-    cmp #$00
+    cmp #<WORK_RAM1 + $2d0
     bcc store_ptr        // < 5300 → keep
 
 wrap_ptr:
@@ -473,7 +475,7 @@ sub_80c5:
     lda byte_e7
     ora byte_e8
     bne loc_80e8
-    inc WORK_RAM1+$1DF // word_520E+1
+    inc WORK_RAM1 + $1DF // word_520E+1
 
 loc_80e8:
 
@@ -496,7 +498,7 @@ loc_80e8:
     lda byte_ec
     ora byte_ed
     bne loc_80fb
-    inc WORK_RAM1+$1DF  // word_520E+1
+    inc WORK_RAM1 + $1DF  // word_520E+1
 
 loc_80fb:
 
@@ -545,22 +547,21 @@ sub_8115:
 * R=>L Clear Routine              *
 * Initialization (first call only)*
 ***********************************/
-    lda #< (SCREEN_BASE + $40) // was $41
+    // Start ONE tile past the last visible column.
+   // Because the step does: dec count, then ptr -= 2, then clears.
+    lda #<(SCREEN_BASE + (CHARS_WIDE*2)) 
     sta byte_fd
-    lda #> (SCREEN_BASE + $40) // was $41
+    lda #>(SCREEN_BASE + (CHARS_WIDE*2))
     sta byte_fe
-	
-	
-    //lda #$21		// number of columns, 32
-	lda #CHARS_WIDE+1
+
+    lda #CHARS_WIDE+1     // IMPORTANT: clears (count-1) columns => 32
     sta byte_ff
 
     lda #1
     sta byte_ca
 
     inc byte_c5
-	
-    lda #1          // not finished
+    lda #1
     rts
 
 /*****************
@@ -614,13 +615,12 @@ loc_813f:
 
 	// tmp_ptr = tmp_ptr + $40 (next row)
 	lda byte_f0
-	clc
-	//adc #$40
-	adc #LINESTEP_BYTES
-	sta byte_f0
-	lda byte_f1
-	adc #0
-	sta byte_f1
+    clc
+    adc #<LINESTEP_BYTES
+    sta byte_f0
+    lda byte_f1
+    adc #>LINESTEP_BYTES
+    sta byte_f1
 
 	dex
 	bne loc_813f
@@ -713,7 +713,7 @@ delay_loop:
 
 
 /*************************************
-* Set crosshatch 						 *
+* Set crosshatch                     *
 *************************************/
 
 // byte_0 = pointer low
@@ -776,16 +776,24 @@ loc_821e:
 */
 
 
+// ------------------------------------------------------------
+// sub_821a  (FIXED)
+// Draw 32xCHARS_HIGH grid into visible 32 columns,
+// then write RRB tail init for the rest of the row.
+//
 // Assumes:
-//   SCREEN_BASE   = $2800
-//   CHARS_WIDE    = 32          // visible
-//   CHARS_HIGH    = 32
-//   LINESTEP      = TOTAL_CHARS * 2   // 160 bytes (80 chars × 2)
-
-// byte_0/byte_1 = screen pointer
-// byte_2        = tile number (crosshatch)
-// y             = inner index (0..CHARS_WIDE-1)
-// x             = outer row counter
+//   SCREEN_BASE      = $2400 (or wherever)
+//   VISIBLE_COLS     = 32
+//   CHARS_HIGH       = 32
+//   LINESTEP_BYTES   = TOTAL_CHARS * 2  (includes tail words)
+//   TILE_OFFSET      = base tile page offset for screen words
+//   byte_0/byte_1    = screen pointer
+//   byte_2           = tile index (0..255) for crosshatch
+// ------------------------------------------------------------
+// Draw visible 32 cols crosshatch + init RRB tail for each row.
+// Uses a streaming pointer so we never overflow Y.
+// Requires: LINESTEP_BYTES = (TAIL_OFF + (RRB_PixiesPerRow*6) + 4)
+// ------------------------------------------------------------
 
 sub_821a:
     lda #<SCREEN_BASE
@@ -793,95 +801,139 @@ sub_821a:
     lda #>SCREEN_BASE
     sta byte_1
 
-    ldx #CHARS_HIGH         // 32 rows
+    ldx #CHARS_HIGH
 
 row_loop:
+    // stream pointer write: always use Y=0
     ldy #0
 
-col_loop:
-    // low byte at (byte_0),Y
+    // -------------------------
+    // visible 32 columns (64 bytes)
+    // -------------------------
+    ldz #CHARS_WIDE            // 32 cells
+
+vis_loop:
+    // tile lo = byte_2 + TILE_OFFSET(lo)
     lda byte_2
     clc
     adc #<TILE_OFFSET
     sta (byte_0),y
-
-    // high byte at Y+1
-    lda #$00
-    clc
-    adc #>TILE_OFFSET
-    iny
+    // advance pointer by 1
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // tile hi = TILE_OFFSET(hi) + carry
+    lda #>TILE_OFFSET
+    adc #0
     sta (byte_0),y
+    // advance pointer by 1
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    dez
+    bne vis_loop
 
-    // advance Y by 1 more so we've moved 2 bytes total
-    iny                        // Y += 1 (so net +2 per cell)
-
-    cpy #(CHARS_WIDE*2)        // 32 chars * 2 = 64 bytes
-    bne col_loop
-
-    // at end of row, Y = 64, so pointer to visible-end-of-row:
-    //  byte_0 + 64 = start_of_rrb_tail
-    // now advance to next row start by adding (160 - 64 = 96)
-	
-	// Y = 64 (end of visible region)
-	// byte_0/byte_1 = start of row
-
-	/************************RRB INIT**********************************/
-	
-
-	phx // preserve the number of rows we need to draw the entire screen
+    // -------------------------
+    // tail init: RRB_PixiesPerRow slots, 6 bytes each
+    // -------------------------
+    phx
     ldx #RRB_PixiesPerRow
-PixieLoop:
-    // raster
-    lda RRB_PixieProtoType
+
+pix_loop:
+    // byte 0
+    lda RRB_PixieProtoType+0
     sta (byte_0),y
-    iny
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // byte 1
     lda RRB_PixieProtoType+1
     sta (byte_0),y
-    iny
-
-    // tile
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // byte 2 (tile lo + TILE_OFFSET lo)
     lda RRB_PixieProtoType+2
     clc
     adc #<TILE_OFFSET
     sta (byte_0),y
-    iny
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // byte 3 (tile hi + TILE_OFFSET hi + carry)
     lda RRB_PixieProtoType+3
-    clc
     adc #>TILE_OFFSET
     sta (byte_0),y
-    iny
-
-    // GOTOX
-    lda #0
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // byte 4
+    lda RRB_PixieProtoType+4
     sta (byte_0),y
-    iny
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    // byte 5
     lda RRB_PixieProtoType+5
     sta (byte_0),y
-    iny
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+
     dex
-    bne PixieLoop
+    bne pix_loop
+
+    // -------------------------
+    // final GOTOX (2 bytes)
+    // -------------------------
+    lda RRB_PixieProtoType+4
+    sta (byte_0),y
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    lda RRB_PixieProtoType+5
+    sta (byte_0),y
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+
+    // -------------------------
+    // dummy tile word (2 bytes) MUST match prototype tile word
+    // -------------------------
+    lda RRB_PixieProtoType+2
+    clc
+    adc #<TILE_OFFSET
+    sta (byte_0),y
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+    lda RRB_PixieProtoType+3
+    adc #>TILE_OFFSET
+    sta (byte_0),y
+    inc byte_0
+    bne !+
+    inc byte_1
+!:
+
     plx
 
-    // dummy tile
-    lda #0
-    sta (byte_0),y
-    iny
-    lda #0
-    sta (byte_0),y
-    iny
-	
-	/******************************************************************/
-	
-    clc
-    lda byte_0
-    adc #<LINESTEP_BYTES 
-    sta byte_0
-    lda byte_1
-    adc #>LINESTEP_BYTES 
-    sta byte_1
-
+    // At this point, pointer has advanced exactly one whole row:
+    // 64 + (RRB_PixiesPerRow*6) + 4 bytes.
+    // So byte_0/byte_1 is already at next row start.
     dex
     lbne row_loop
+
     rts
 
 	
@@ -1134,13 +1186,18 @@ loc_897d:
     // increment frame counter
     inc byte_d4
 
+	
     // call main VBLANK routine (Sprites) 
     jsr sub_8b30
 	
+	// hack to move last sprite in title screen up.
+	//lda #$91
+	//sta SPRITE_RAM1+$27
+	
     jsr BuildSpriteQueueFromArcadeRAM
-    jsr BuildPixieBucketsFromSpriteQueue
-
-
+	jsr BuildPixieListFromSpriteQueue
+	jsr RRB_BuildAllRows     // builds tails for every row from pixie list
+	
     // call secondary routine (Other functions)
     jsr sub_899e
 
@@ -1207,7 +1264,7 @@ loc_89ce:
     cmp #3
     lbeq loc_8b0e
 
-    lda WORK_RAM1+$1DF // $520f
+    lda WORK_RAM1 + $1DF // $520f
     beq loc_8a00
 
     lda byte_e2
@@ -1478,7 +1535,7 @@ loc_8ad2:
     sta byte_e2
 
     // lda $5608
-    lda #(WORK_RAM2+$1d8)
+    lda #(WORK_RAM2 + $1d8)
     bne loc_8ae2        // if nonzero → skip
     jsr sub_c6f3		 // to do.
 	
@@ -1544,9 +1601,9 @@ loc_8b0e:
     // Read next script byte
     lda 0,x
     inx
-    sta WORK_RAM2+$1D7  // store command byte - 0X5607
+    sta WORK_RAM2 + $1D7  // store command byte - 0X5607
     lda #1
-    sta WORK_RAM2+$1D8  // mark command ready - 0X5608
+    sta WORK_RAM2 + $1D8  // mark command ready - 0X5608
 
     // Wrap if past end
     cpx #(WORK_RAM1 + $2EF) // 0x531f
@@ -1597,6 +1654,7 @@ loc_8be5://R=>L State
 locret_8bf7:
     rts
 	
+	
 /************************
 *Splash Screen Function *
 ************************/
@@ -1643,7 +1701,7 @@ loc_8c06:
     sta byte_47
 
     // Y = #$000A  (we only need low byte)
-    lda #$0A
+    lda #$0a
     sta byte_20
 
     // B = #$38
@@ -1658,15 +1716,16 @@ loc_8c1b:
 done_first_loop:
  
     // Reset Y count for second loop
-	lda #$0A
+	lda #$0a
 	sta logoCount
 	lda #$38  
 	sta logoX 
 loc_8c27:
     lda #$90
-    jsr sub_8c30
+	jsr sub_8c30
     beq done_second_loop
     jmp loc_8c27
+	
 done_second_loop:
 	jmp loc_8cb3
 sub_8c30:
@@ -1717,7 +1776,7 @@ dontIncsprPtrHi:
     sta logoCount
     // Z now reflects end of row, just like 6809
 locret_8c43:
-    rts
+	rts
 	
 // clear tile bits for Konami logo + copyright
 sub_8ca5:
@@ -1729,9 +1788,9 @@ sub_8ca5:
 
 loc_8cb3:
 	
-    lda #<WORK_RAM1+$140  //$5170
+    lda #<WORK_RAM1 + $140  //$5170
     sta sprPtrLo
-    lda #>WORK_RAM1+$140
+    lda #>WORK_RAM1 + $140
     sta sprPtrHi
 
     // Y = 3 sprites
@@ -1972,8 +2031,7 @@ loc_8b3c:
     lda (U_L),y
 
     // cmpx #$5026 / bcc loc_8b60  (X is offset now)
-    ldx X_L
-    cpx #$26
+    cpx #$27	// workaround - applied for the last sprite offset in the title
     bcs loc_8b60
 
     // save Y (DO NOT use tmp; ASRA uses tmp)
@@ -1998,7 +2056,13 @@ loc_8b3c:
     clc
     adc #1
     jmp loc_8b60
-
+	
+	/* workaround for last sprite offset adjust in the title
+loc_8b5f_:
+	clc
+	adc #1
+	jmp loc_8b60 */
+	
 loc_8b5f:
     sec
     sbc #1
@@ -2042,11 +2106,11 @@ loc_8b78:
     // cmpu #$51B0 / bcs loc_8B3C
     // (branch if U < $51B0, consistent with earlier port usage)
     lda U_H
-    cmp #>WORK_RAM1+$180
+    cmp #>WORK_RAM1 + $180
     lbcc loc_8b3c
     bne !u_not_lt+
     lda U_L
-    cmp #<WORK_RAM1+$180
+    cmp #<WORK_RAM1 + $180
     lbcc loc_8b3c
 !u_not_lt:
 
@@ -2189,11 +2253,11 @@ loc_8bcb:
     // bcs loc_8B8A
     // (branch if U < $51B0, consistent with earlier port usage)
     lda U_H
-    cmp #>WORK_RAM1+$180
+    cmp #>WORK_RAM1 + $180
     lbcc loc_8b8a
     bne !u_not_lt_51b0+
     lda U_L
-    cmp #<WORK_RAM1+$180
+    cmp #<WORK_RAM1 + $180
     lbcc loc_8b8a
 !u_not_lt_51b0:
 
@@ -2240,9 +2304,9 @@ sub_92ad:
     sta byte_20
 
     // X = $5F6D by default
-    lda #<$5F6D
+    lda #<SCREEN_BASE + $76D
     sta byte_30
-    lda #>$5F6D
+    lda #>SCREEN_BASE + $76D
     sta byte_31
 
     // if C4 == 1, override X = $5DAD
@@ -2250,9 +2314,9 @@ sub_92ad:
     cmp #1
     bne loc_92ca    // just skip override, but DO NOT RETURN
 
-    lda #<$5DAD
+    lda #<SCREEN_BASE + $5AD
     sta byte_30
-    lda #>$5DAD
+    lda #>SCREEN_BASE + $5AD
     sta byte_31
 
 loc_92ca:
@@ -2270,18 +2334,18 @@ loc_92ca:
     sta byte_20
 
     // X = $5EF1 (default)
-    lda #<$5EF1
+    lda #<SCREEN_BASE + $6F1
     sta byte_30
-    lda #>$5EF1
+    lda #>SCREEN_BASE + $6F1
     sta byte_31
 
     // if C4 == 1, X = $5D31
     lda byte_c4
     cmp #1
     bne sub_92df
-    lda #<$5D31
+    lda #<SCREEN_BASE + $531
     sta byte_30
-    lda #>$5D31
+    lda #>SCREEN_BASE + $531
     sta byte_31
 
 // U pointer  = byte_46 (lo), byte_47 (hi)
