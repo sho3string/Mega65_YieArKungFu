@@ -2,11 +2,11 @@
 
 /***********************************
 *0x4000 W  control port            *
-*bit 0 - flip screen			0x1   *
-*bit 1 - NMI enable			0x2   *
-*bit 2 - IRQ enable			0x4   *
-*bit 3 - coin counter A		0x8   *
-*bit 4 - coin counter B		0x10  *
+*bit 0 - flip screen		0x1    *
+*bit 1 - NMI enable			0x2    *
+*bit 2 - IRQ enable			0x4    *
+*bit 3 - coin counter A		0x8    *
+*bit 4 - coin counter B		0x10   *
 ***********************************/
 byte_4000_shadow: .byte 0
 
@@ -85,20 +85,19 @@ d562_u:
 	
 
 /***********************************************************
-* 						ENEMY NAMES							 *
-*                    ------------							 *
-*Code read ascii character and coverts this to a tile #	 *
-*ie..'B' which is 0x42-0x30 becomes 0x12					 *
-*																 *
-* Routine start reading from end of string and reads 		 *
-* backwards until null char is hit.							 *
+* 						ENEMY NAMES						   *
+*                    ------------						   *
+*Code read ascii character and coverts this to a tile #    *
+*ie..'B' which is 0x42-0x30 becomes 0x12				   *
+*														   *
+* Routine start reading from end of string and reads 	   *
+* backwards until null char is hit.						   *
 ***********************************************************/
 
-//				   B   U   C   H   U
 	.byte $30,$40,$42,$55,$43,$48,$55 	// @BUCHU
 buchu: 
 
-	.byte $30,$40,$53,$54,$41,$52			// @STAR
+	.byte $30,$40,$53,$54,$41,$52		// @STAR
 star:
 
 	.byte $30,$4E,$55,$4E,$43,$48,$41	// NUNCHA
@@ -113,10 +112,10 @@ feedle:
 	.byte $30,$40,$43,$48,$41,$49,$4E	// @CHAIN
 chain:
 	
-	.byte $30,$40,$43,$4C,$55,$42			// @CLUB
+	.byte $30,$40,$43,$4C,$55,$42		// @CLUB
 club:
 
-	.byte $30,$40,$46,$41,$4E				// @FAN
+	.byte $30,$40,$46,$41,$4E			// @FAN
 fan:
 
 	.byte $30,$40,$53,$57,$4F,$52,$44	// @SWORD
@@ -144,15 +143,15 @@ d562:
 *************************************/
 
 d56a:					
-	.word pressStartButton	//D5B2
-	.word onePlayerOnly		//D5C7
+	.word pressStartButton		//D5B2
+	.word onePlayerOnly			//D5C7
 	.word oneOrTwoPlayers		//D5D9
 	.word hotFightingHistory	//D5EE
-	.word masterhandHistory	//D605
+	.word masterhandHistory		//D605
 	.word doYourBest			//D61A
-	.word playerOne			//D667
-	.word playerOne			//D667
-	.word playerTwo			//D674
+	.word playerOne				//D667
+	.word playerOne				//D667
+	.word playerTwo				//D674
 	.word gameOver				//D681
 	.word TwoUp					//D68E
 	.word OneUp					//D694
@@ -164,7 +163,7 @@ d56a:
 	.word nextOpponent			//D6DE
 	.word ram1ok				//D6EE
 	.word rambad				//D71C
-	.word colorTest			//D728
+	.word colorTest				//D728
 	.word ioTest				//D74F
 	.word CoinCounter1			//D807
 	.word DipSWSelect			//D818
@@ -172,7 +171,7 @@ d56a:
 	.word FreePlay				//D8A3
 	.word Table					//D8B0
 	.word UpRight				//D8BB
-	.word SoundTest			//D8C6
+	.word SoundTest				//D8C6
 	.word Invalidity			//D8E0
 	.word Time					//D8ED
 	.word scoreRanking			//D8F4
@@ -222,13 +221,13 @@ doYourBest:
 	.word $5E4D 
 	.byte $44,$4F,$40							 // DO@
 	.byte $59,$4F,$55,$52,$40 				 // YOUR@
-	.byte $42,$45,$53,$54,$5D,$5D 				 // BEST!!
+	.byte $42,$45,$53,$54,$5D,$5D				// BEST!!
 	.byte $2f
 
 goodLuck:
 	.word $5ED3 
 	.byte $47,$4F,$4F,$44,$40					 // GOOD@
-	.byte $4C,$55,$43,$4B,$5D,$5D 			 	// LUCK!!
+	.byte $4C,$55,$43,$4B,$5D,$5D 			 // LUCK!!
 	.byte $2f
 
 firstBonus:
@@ -253,8 +252,8 @@ playerOne:
 
 playerTwo:
 	.word $5BD5 
-	.byte $50,$4C,$41,$59,$45,$52,$40			 // PLAYER@
-	.byte $54,$57,$4F 							 // TWO
+	.byte $50,$4C,$41,$59,$45,$52,$40			// PLAYER@
+	.byte $54,$57,$4F							// TWO
 	.byte $3f
 	
 gameOver:
@@ -286,16 +285,16 @@ oolong:
 ko:
 	.word $599F
 	.byte $4B,$4F								 // KO
-	.byte $3f									 // end.
+	.byte $3f									// end.
 
 stage:
 	.word $5C97					
-	.byte $53,$54,$41,$47,$45					 // STAGE
+	.byte $53,$54,$41,$47,$45					// STAGE
 	.byte $3f
 
 perfect:	
 	.word $5981
-	.byte $50,$45,$52,$46,$45,$43,$54			 // PERFECT
+	.byte $50,$45,$52,$46,$45,$43,$54		// PERFECT
 	.byte $3f
 
 credit:
@@ -687,7 +686,7 @@ da5a:
 ***************/
 
 	.byte	$28,$61	 // Y coord,X coord
-	.byte	$02,$41 	 // Tile#, [FlipX ( bit 6 ) + Page ( 2nd page )] <== these will change according to our sprite sheet.
+	.byte	$02,$41  // Tile#, [FlipX ( bit 6 ) + Page ( 2nd page )] <== these will change according to our sprite sheet.
 	
 	
 /**************
@@ -746,7 +745,14 @@ Calculation: Start at page 2 + page# of sprite * 2.
 Find tile offset: 13 
 */
 
-RRB_PixieProtoType: // set this to a blank tile and move off screen, say 0xff. for now we want to see them all as we troubleshoot
-		.byte 245, 0	// 255,0
-		.byte 69, $06  
-		.byte 64, 1		// 64,1 is default.
+RRB_PixieProtoType: // set this to a blank tile and move off screen
+	.byte 255, 0	// raster (move offscreen-ish) , 255,0
+	.byte 69, $06	// tile (will be offset by TILE_OFFSET)
+	.byte 64, 1		// gotox (64,1 == 320 EOL)
+		
+RRB_ColorProtoType:
+	// control,mask, flip/attr(2), gotox ctrl word(2)
+	.byte $98,$ff
+	.byte $00,$00
+	.byte $10,$00   
+		
