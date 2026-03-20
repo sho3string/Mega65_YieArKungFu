@@ -635,18 +635,28 @@ loc_814a:
     lda #0                  // return zero (finished)
     rts
 	
+
 /*************************
 * Clears Sprite Data     *
-* 5030-51BC              *
+* 5030-51AF              *
 *************************/
 sub_814c:
-    ldx #WORK_RAM1          	// start = $5030
+    LDX(WORK_RAM1)          // emulated 6809 X = $5030
+
 loc_8152:
     lda #0
-    sta 0,x                 	// clear byte
-    inx
-    cpx #(WORK_RAM1 + $180) 	// end = $5030 + $180 = $51B0
-    bcc loc_8152               // branch while X < end
+
+    ldy #0
+    sta (X_L),y             // first byte of STD ,x++
+    iny
+    sta (X_L),y             // second byte of STD ,x++
+
+    INC16(X_L, X_H)         // x++
+    INC16(X_L, X_H)         // x++ again  => total +2
+
+    CMPX(WORK_RAM1 + $180)  // compare against $51B0
+    BCS(loc_8152)           // 6809 BCS = branch while X < end
+
     rts
 
 
@@ -713,7 +723,7 @@ delay_loop:
 
 
 /*************************************
-* Set crosshatch                     *
+* Set crosshatch 						 *
 *************************************/
 
 // byte_0 = pointer low
@@ -1029,13 +1039,22 @@ locret_8445:
 *        .byte $3F               // terminator                 *
 ***************************************************************/
 
+/**************************************************************
+*  sub_87cf – Text Script Interpreter (6809 → MEGA65 port)    *
+*                                                             *
+*  zp_cmd_param bit layout:                                   *
+*    bit 7 = 0 -> draw text                                   *
+*    bit 7 = 1 -> clear text                                  *
+*    bits 0-6 = script index                                  *
+***************************************************************/
+
 sub_87cf:
 
     //-------------------------------------------
     // 1. Use command parameter to select script
     //-------------------------------------------
-    lda zp_cmd_param       // B in the original 6809
-    asl                    // *2 (each entry in d56a is 2 bytes)
+    lda zp_cmd_param       // original used B
+    asl                    // *2 for .word table, bit7 -> carry = clear mode
     tax
 
     lda d56a,x             // low byte of script pointer
@@ -1043,11 +1062,13 @@ sub_87cf:
     lda d56a+1,x           // high byte
     sta zp_script_hi
 
+    bcs ClearInit          // original: bcs loc_87F0
+
 
     //-------------------------------------------------
-    // 2. Read first word from script = tilemap address
-    //   script[0..1] = tilemap address
+    // DRAW MODE
     //-------------------------------------------------
+DrawInit:
     ldy #0
     lda (zp_script_lo),y   // low byte of tilemap address
     sta zp_tile_lo
@@ -1057,69 +1078,51 @@ sub_87cf:
     iny
     sty zp_script_idx      // script index now points to first encoded char
 
-// ------------------------------------------------------------
-// Main decode loop - like loc_87DE / loc_87F5
-// ------------------------------------------------------------
 
-TextLoop:
+DrawLoop:
     ldy zp_script_idx
     lda (zp_script_lo),y   // A = next encoded byte
     iny
     sty zp_script_idx
-	
 
     cmp #$3F               // '?' = end of script
-    beq TextDone
+    lbeq TextDone
 
-    cmp #$2F               // '/' = new line (load new tilemap address)
-    beq NewLine
+    cmp #$2F               // '/' = new line
+    beq DrawNewLine
 
     //------------------------------
     // Normal character:
     //   tile_index = A - $30
-    //   write TILE then ATTR
-    //   advance tile pointer by 2
     //------------------------------
-    // A = encoded byte here
-
-    // 1. Convert to glyph index
     sec
     sbc #$30               // A = glyph index
     sta zp_glyph_index
 
-    // 2. Write low byte: low(TILE_OFFSET) + glyph_index
+    // write low byte of tile entry
     ldy #0
     lda #<(TILE_OFFSET)
     clc
     adc zp_glyph_index
     sta (zp_tile_lo),y
 
-    // 3. Write high byte: high(TILE_OFFSET) + carry from low-byte add
+    // write high byte of tile entry
     iny
     lda #>(TILE_OFFSET)
-    adc #0                 // add incoming carry only
+    adc #0
     sta (zp_tile_lo),y
 
- 
-    // advance tile pointer by 2 bytes (next tile entry)
+    // advance tile pointer by 2 bytes
     clc
     lda zp_tile_lo
     adc #2
     sta zp_tile_lo
-    bcc NoTileHiCarry
+    bcc DrawLoop
     inc zp_tile_hi
+    jmp DrawLoop
 
-NoTileHiCarry:
 
-    jmp TextLoop
-
-// ------------------------------------------------------------
-// New line: '/' encountered
-// We read a NEW tilemap address from the script and continue
-// ------------------------------------------------------------
-
-NewLine:
-    // script[script_idx..] = new tilemap address (2 bytes)
+DrawNewLine:
     ldy zp_script_idx
     lda (zp_script_lo),y   // low byte of new tilemap address
     sta zp_tile_lo
@@ -1127,14 +1130,71 @@ NewLine:
     lda (zp_script_lo),y   // high byte
     sta zp_tile_hi
     iny
-    sty zp_script_idx      // advance script index past address
+    sty zp_script_idx
+    jmp DrawLoop
 
-    jmp TextLoop
 
-// ------------------------------------------------------------
-// End of script: '?' encountered
-// Return to the command consumer loop (loc_807c)
-// ------------------------------------------------------------
+    //-------------------------------------------------
+    // CLEAR MODE
+    // Same script walk, but every printable char
+    // becomes glyph $10 instead of (char - $30)
+    //-------------------------------------------------
+ClearInit:
+    ldy #0
+    lda (zp_script_lo),y   // low byte of tilemap address
+    sta zp_tile_lo
+    iny
+    lda (zp_script_lo),y   // high byte
+    sta zp_tile_hi
+    iny
+    sty zp_script_idx
+
+
+ClearLoop:
+    ldy zp_script_idx
+    lda (zp_script_lo),y   // read next script byte
+    iny
+    sty zp_script_idx
+
+    cmp #$3F               // '?' = end of script
+    beq TextDone
+
+    cmp #$2F               // '/' = new line
+    beq ClearNewLine
+
+    //------------------------------
+    // Clear character:
+    //   always write glyph $10
+    //------------------------------
+    ldy #0
+    lda #<(TILE_OFFSET + $10)
+    sta (zp_tile_lo),y
+
+    iny
+    lda #>(TILE_OFFSET + $10)
+    sta (zp_tile_lo),y
+
+    // advance tile pointer by 2 bytes
+    clc
+    lda zp_tile_lo
+    adc #2
+    sta zp_tile_lo
+    bcc ClearLoop
+    inc zp_tile_hi
+    jmp ClearLoop
+
+
+ClearNewLine:
+    ldy zp_script_idx
+    lda (zp_script_lo),y   // low byte of new tilemap address
+    sta zp_tile_lo
+    iny
+    lda (zp_script_lo),y   // high byte
+    sta zp_tile_hi
+    iny
+    sty zp_script_idx
+    jmp ClearLoop
+
 
 TextDone:
     jmp loc_807c
@@ -1163,6 +1223,7 @@ TextDone:
 */
 	
 loc_8808: // not sure what this is for
+
 loc_8824: // to do
 
 /*****************************
@@ -1188,11 +1249,10 @@ loc_897d:
 
 	
     // call main VBLANK routine (Sprites) 
+
+loc_898f:
     jsr sub_8b30
-	
-	// hack to move last sprite in title screen up.
-	//lda #$91
-	//sta SPRITE_RAM1+$27
+
 	
     jsr BuildSpriteQueueFromArcadeRAM
 	jsr BuildPixieListFromSpriteQueue
@@ -1622,340 +1682,8 @@ loc_8b28:
     asl
     tax
     jmp (d9f0,x)
-
-/************************
-*Vblank driven Functions*
-*Function table at D9F0 *
-*And at  D9F8           *
-************************/
-
-
-/************************
-*R=>L Clear Function    *
-*************************/
-loc_8bdd://R=>L state
-	lda byte_c4        // load sub‑state index
-    asl                // multiply by 2 (word entries)
-    tax                // X = offset into table
-    jmp (d9f8,x)      // jump to handler
-
-loc_8be5://R=>L State
-    jsr sub_8115        // step R→L clear
-    cmp #0
-    bne locret_8bf7     // if not finished, return
-
-
-	lda #$a0
-    sta byte_ca         // ByteCA = #$A0
-    inc byte_c4         // advance sub_state
-
-    jsr sub_842c		// check coctail mode
-    jsr sub_814c		// Clear sprite ram
-locret_8bf7:
-    rts
-	
-	
-/************************
-*Splash Screen Function *
-************************/
-loc_8bf8:
-    dec byte_ca
-    bne loc_8c06        // still waiting → stay in splash
-
-    inc byte_c4         // advance to next game state
-    lda #0
-    sta byte_c5         // reset sub_state
-
-    jsr sub_814c        // clear sprite RAM (5030–51BC)
-    jmp sub_8ca5        // clear tile bits for Konami logo + copyright
 	
 
-
-// ZP layout
-.const sprPtrLo	= byte_30   // X pointer low
-.const sprPtrHi	= byte_31   // X pointer high
-.const logoPtrLo	= byte_46   // U pointer low
-.const logoPtrHi	= byte_47   // U pointer high
-.const logoX		= byte_21   // B equivalent
-.const logoCount	= byte_20   // Y equivalent
-.const tmpPtrLo 	= byte_f4
-.const tmpPtrHi 	= byte_f5
-
-
-loc_8c06:
-    lda byte_ca
-    cmp #$9F
-    lbne locret_8c43
-
-    jsr sub_92ad
-    // X = #$5030
-    lda #<WORK_RAM1
-    sta byte_30
-    lda #>WORK_RAM1
-    sta byte_31
-
-    // U = #$DA46
-    lda #<da46
-    sta byte_46
-    lda #>da46
-    sta byte_47
-
-    // Y = #$000A  (we only need low byte)
-    lda #$0a
-    sta byte_20
-
-    // B = #$38
-    lda #$38
-    sta logoX
-	
-loc_8c1b:
-    lda #$A0
-    jsr sub_8c30
-    beq done_first_loop
-    jmp loc_8c1b
-done_first_loop:
- 
-    // Reset Y count for second loop
-	lda #$0a
-	sta logoCount
-	lda #$38  
-	sta logoX 
-loc_8c27:
-    lda #$90
-	jsr sub_8c30
-    beq done_second_loop
-    jmp loc_8c27
-	
-done_second_loop:
-	jmp loc_8cb3
-sub_8c30:
-    // A on entry = Y position (like d0 -> 6(a0))
-    ldy #6
-    sta (sprPtrLo),y        // [sprPtr+6] = Y
-
-    // load next tile index: A = (logoPtr)
-    ldy #0
-    lda (logoPtrLo),y
-    // increment logoPtr++
-    inc logoPtrLo
-    bne dontInclogoPtrHi
-    inc logoPtrHi
-dontInclogoPtrHi:
-    // store tile index at [sprPtr+E]
-    ldy #$0E
-    sta (sprPtrLo),y
-
-    // write attribute $41 at [sprPtr+F]
-    lda #$41
-    iny                     // Y = $0F
-    sta (sprPtrLo),y
-
-    // X position from logoX → [sprPtr+4]
-    lda logoX
-    ldy #4
-    sta (sprPtrLo),y
-
-    // logoX += $10
-    clc
-    lda logoX
-    adc #$10
-    sta logoX
-
-    // sprPtr += $10
-    clc
-    lda sprPtrLo
-    adc #$10
-    sta sprPtrLo
-    bcc dontIncsprPtrHi
-    inc sprPtrHi
-dontIncsprPtrHi:
-    // logoCount--
-    lda logoCount
-    sec
-    sbc #1
-    sta logoCount
-    // Z now reflects end of row, just like 6809
-locret_8c43:
-	rts
-	
-// clear tile bits for Konami logo + copyright
-sub_8ca5:
-	jmp *
-	
-/************************************************************
-* loc_8CB3 — Write Sprite Data and characters (i, ® cluster)*
-************************************************************/
-
-loc_8cb3:
-	
-    lda #<WORK_RAM1 + $140  //$5170
-    sta sprPtrLo
-    lda #>WORK_RAM1 + $140
-    sta sprPtrHi
-
-    // Y = 3 sprites
-    lda #3
-    sta logoCount
-
-    // U = $DA5A (sprite data table)
-    lda #<da5a
-    sta logoPtrLo
-    lda #>da5a
-    sta logoPtrHi
-
-// X = $5170 already reflected in sprPtrLo/Hi
-// U = $DA5A already in logoPtrLo/Hi
-// logoCount = 3
-
-loc_8cbd:
-    // ----------------------------------------
-    // First word: Ypos, Xpos
-    // ----------------------------------------
-
-    // Ypos at sprPtr + 6
-    ldy #0
-    clc
-    lda sprPtrLo
-    adc #6
-    sta tmpPtrLo
-    lda sprPtrHi
-    adc #0
-    sta tmpPtrHi
-
-    lda (logoPtrLo),y      // Ypos
-    ldy #0
-    sta (tmpPtrLo),y
-
-    // Xpos at sprPtr + 4
-    ldy #1                  // second byte in DA5A entry
-    clc
-    lda sprPtrLo
-    adc #4
-    sta tmpPtrLo
-    lda sprPtrHi
-    adc #0
-    sta tmpPtrHi
-
-    lda (logoPtrLo),y      // Xpos
-    ldy #0
-    sta (tmpPtrLo),y
-
-    // U += 2 (past Ypos/Xpos)
-    clc
-    lda logoPtrLo
-    adc #2
-    sta logoPtrLo
-    bcc no_inc_hi1
-    inc logoPtrHi
-no_inc_hi1:
-
-    // ----------------------------------------
-    // Second word: tile, attr
-    // ----------------------------------------
-
-    // tile at sprPtr + $0E
-    ldy #0
-    clc
-    lda sprPtrLo
-    adc #$0E
-    sta tmpPtrLo
-    lda sprPtrHi
-    adc #0
-    sta tmpPtrHi
-
-    lda (logoPtrLo),y      // tile
-    ldy #0
-    sta (tmpPtrLo),y
-
-    // attr at sprPtr + $0F
-    ldy #1
-    clc
-    lda sprPtrLo
-    adc #$0F
-    sta tmpPtrLo
-    lda sprPtrHi
-    adc #0
-    sta tmpPtrHi
-
-    lda (logoPtrLo),y      // attr
-    ldy #0
-    sta (tmpPtrLo),y
-
-    // U += 2 (past tile/attr)
-    clc
-    lda logoPtrLo
-    adc #2
-    sta logoPtrLo
-    bcc no_inc_hi2
-    inc logoPtrHi
-no_inc_hi2:
-
-    // ----------------------------------------
-    // sprPtr += $10 (next sprite)
-    // ----------------------------------------
-    clc
-    lda sprPtrLo
-    adc #$10
-    sta sprPtrLo
-    bcc no_inc_hi3
-    inc sprPtrHi
-no_inc_hi3:
-
-    // logoCount--
-    lda logoCount
-    sec
-    sbc #1
-    sta logoCount
-    lbne loc_8cbd
-
-/**********************************
-* Character RAM writes (dot, i, ®)*
-**********************************/
-
-/**
- * Character RAM writes (dot, i, ®)
- * Store accumulator to calculated screen position
- * 
- * This calculates a specific screen position for placing a character:
- * - SCREEN_BASE: Base address of screen memory
- * - RRB_Tail: Variable representing offset for RRB
- * - $665/$40: Division (calculating row/column positioning)
- * - Note: arcade uses a rowsize of $40 / 64 for each row.
- * - $665-1: Final offset adjustment
- * $665>>6 is effectively $665/$40 which calculates the row
- * Arcade uses a rowsize of $40 / 64
- * The comment indicates this places a "dot above the i" character
- * at a specific calculated screen coordinate
- */
-
-.const arcadeRowSize = 6 // offset/0x40
-
-    lda #$AE
-	//sta $5E65-1
-    sta SCREEN_BASE+(RRB_Tail_words	*2*($665>>arcadeRowSize))+$665-1 // dot above the i
-	lda #$9F
-	//sta $5EA5-1
-    sta SCREEN_BASE+(RRB_Tail_words	*2*($6a5>>arcadeRowSize))+$6a5-1 // the i
-	lda #$BD
-	sta SCREEN_BASE+(RRB_Tail_words	*2*($6a7>>arcadeRowSize))+$6a7-1 // (r)
-	//sta $5EA7-1
-	
-loc_8cde: // goes here when finished clearing crosshatch
-	lda #$10
-    sta byte_f2      // B = $10
-loc_8ce0:
-	jmp	sub_80a1
-	
-loc_8c44://Playfield/HighScore state 
-	jmp *
-loc_8c5b:
-	jmp *
-loc_8cf6:
-	jmp *
-loc_8de2:
-	jmp *
-	
-	
 /******************************************************
 *Main VBLANK routine (Sprites)                        *
 *sub_8B30 - locret_8BDC                               *
@@ -2275,6 +2003,361 @@ loc_8bcb:
 
 locret_8bdc:
     rts
+
+
+/************************
+*Vblank driven Functions*
+*Function table at D9F0 *
+*And at  D9F8           *
+************************/
+
+
+/************************
+*R=>L Clear Function    *
+*************************/
+loc_8bdd://R=>L state
+	lda byte_c4        // load sub‑state index
+    asl                // multiply by 2 (word entries)
+    tax                // X = offset into table
+    jmp (d9f8,x)      // jump to handler
+
+loc_8be5://R=>L State
+    jsr sub_8115        // step R→L clear
+    cmp #0
+    bne locret_8bf7     // if not finished, return
+
+
+	lda #$a0
+    sta byte_ca         // ByteCA = #$A0
+    inc byte_c4         // advance sub_state
+
+    jsr sub_842c		// check coctail mode
+    jsr sub_814c		// Clear sprite ram
+locret_8bf7:
+    rts
+	
+	
+/************************
+*Splash Screen Function *
+************************/
+loc_8bf8:
+    dec byte_ca
+    bne loc_8c06        // still waiting → stay in splash
+
+    inc byte_c4         // advance to next game state
+    lda #0
+    sta byte_c5         // reset sub_state
+
+    jsr sub_814c        // clear sprite RAM (5030–51BC)
+    jmp sub_8ca5        // clear tile bits for Konami logo + copyright
+	
+
+
+// ZP layout
+.const sprPtrLo	= byte_30   // X pointer low
+.const sprPtrHi	= byte_31   // X pointer high
+.const logoPtrLo	= byte_46   // U pointer low
+.const logoPtrHi	= byte_47   // U pointer high
+.const logoX		= byte_21   // B equivalent
+.const logoCount	= byte_20   // Y equivalent
+.const tmpPtrLo 	= byte_f4
+.const tmpPtrHi 	= byte_f5
+
+
+loc_8c06:
+    lda byte_ca
+    cmp #$9F
+    lbne locret_8c43
+
+    jsr sub_92ad
+    // X = #$5030
+    lda #<WORK_RAM1
+    sta byte_30
+    lda #>WORK_RAM1
+    sta byte_31
+
+    // U = #$DA46
+    lda #<da46
+    sta byte_46
+    lda #>da46
+    sta byte_47
+
+    // Y = #$000A  (we only need low byte)
+    lda #$0a
+    sta byte_20
+
+    // B = #$38
+    lda #$38
+    sta logoX
+	
+loc_8c1b:
+    lda #$A0
+    jsr sub_8c30
+    beq done_first_loop
+    jmp loc_8c1b
+done_first_loop:
+ 
+    // Reset Y count for second loop
+	lda #$0a
+	sta logoCount
+	lda #$38  
+	sta logoX 
+loc_8c27:
+    lda #$90
+	jsr sub_8c30
+    beq done_second_loop
+    jmp loc_8c27
+	
+done_second_loop:
+	jmp loc_8cb3
+sub_8c30:
+    // A on entry = Y position (like d0 -> 6(a0))
+    ldy #6
+    sta (sprPtrLo),y        // [sprPtr+6] = Y
+
+    // load next tile index: A = (logoPtr)
+    ldy #0
+    lda (logoPtrLo),y
+    // increment logoPtr++
+    inc logoPtrLo
+    bne dontInclogoPtrHi
+    inc logoPtrHi
+dontInclogoPtrHi:
+    // store tile index at [sprPtr+E]
+    ldy #$0E
+    sta (sprPtrLo),y
+
+    // write attribute $41 at [sprPtr+F]
+    lda #$41
+    iny                     // Y = $0F
+    sta (sprPtrLo),y
+
+    // X position from logoX → [sprPtr+4]
+    lda logoX
+    ldy #4
+    sta (sprPtrLo),y
+
+    // logoX += $10
+    clc
+    lda logoX
+    adc #$10
+    sta logoX
+
+    // sprPtr += $10
+    clc
+    lda sprPtrLo
+    adc #$10
+    sta sprPtrLo
+    bcc dontIncsprPtrHi
+    inc sprPtrHi
+dontIncsprPtrHi:
+    // logoCount--
+    lda logoCount
+    sec
+    sbc #1
+    sta logoCount
+    // Z now reflects end of row, just like 6809
+locret_8c43:
+	rts
+	
+// clear tile bits for Konami logo + copyright
+
+.const arcadeRowSize = 6 // offset/0x40
+
+sub_8ca5:
+	/*
+	ROM:8CA5                 ldd     #$1090
+	ROM:8CA8                 sta     word_5E65
+	ROM:8CAB                 sta     word_5EA5
+	ROM:8CAE                 sta     word_5EA7
+	ROM:8CB1                 bra     loc_8CE0
+	*/
+	
+	lda #$90
+    sta byte_f2          // emulated B
+	lda #$10
+    sta byte_f3          // emulated A
+   
+    sta SCREEN_BASE+(RRB_Tail_words*2*($665>>arcadeRowSize))+$665-1
+    sta SCREEN_BASE+(RRB_Tail_words*2*($6A5>>arcadeRowSize))+$6A5-1
+    sta SCREEN_BASE+(RRB_Tail_words*2*($6A7>>arcadeRowSize))+$6A7-1
+    lbra loc_8ce0
+	
+/************************************************************
+* loc_8CB3 — Write Sprite Data and characters (i, ® cluster)*
+************************************************************/
+
+loc_8cb3:
+	
+    lda #<WORK_RAM1 + $140  //$5170
+    sta sprPtrLo
+    lda #>WORK_RAM1 + $140
+    sta sprPtrHi
+
+    // Y = 3 sprites
+    lda #3
+    sta logoCount
+
+    // U = $DA5A (sprite data table)
+    lda #<da5a
+    sta logoPtrLo
+    lda #>da5a
+    sta logoPtrHi
+
+// X = $5170 already reflected in sprPtrLo/Hi
+// U = $DA5A already in logoPtrLo/Hi
+// logoCount = 3
+
+loc_8cbd:
+    // ----------------------------------------
+    // First word: Ypos, Xpos
+    // ----------------------------------------
+
+    // Ypos at sprPtr + 6
+    ldy #0
+    clc
+    lda sprPtrLo
+    adc #6
+    sta tmpPtrLo
+    lda sprPtrHi
+    adc #0
+    sta tmpPtrHi
+
+    lda (logoPtrLo),y      // Ypos
+    ldy #0
+    sta (tmpPtrLo),y
+
+    // Xpos at sprPtr + 4
+    ldy #1                  // second byte in DA5A entry
+    clc
+    lda sprPtrLo
+    adc #4
+    sta tmpPtrLo
+    lda sprPtrHi
+    adc #0
+    sta tmpPtrHi
+
+    lda (logoPtrLo),y      // Xpos
+    ldy #0
+    sta (tmpPtrLo),y
+
+    // U += 2 (past Ypos/Xpos)
+    clc
+    lda logoPtrLo
+    adc #2
+    sta logoPtrLo
+    bcc no_inc_hi1
+    inc logoPtrHi
+no_inc_hi1:
+
+    // ----------------------------------------
+    // Second word: tile, attr
+    // ----------------------------------------
+
+    // tile at sprPtr + $0E
+    ldy #0
+    clc
+    lda sprPtrLo
+    adc #$0E
+    sta tmpPtrLo
+    lda sprPtrHi
+    adc #0
+    sta tmpPtrHi
+
+    lda (logoPtrLo),y      // tile
+    ldy #0
+    sta (tmpPtrLo),y
+
+    // attr at sprPtr + $0F
+    ldy #1
+    clc
+    lda sprPtrLo
+    adc #$0F
+    sta tmpPtrLo
+    lda sprPtrHi
+    adc #0
+    sta tmpPtrHi
+
+    lda (logoPtrLo),y      // attr
+    ldy #0
+    sta (tmpPtrLo),y
+
+    // U += 2 (past tile/attr)
+    clc
+    lda logoPtrLo
+    adc #2
+    sta logoPtrLo
+    bcc no_inc_hi2
+    inc logoPtrHi
+no_inc_hi2:
+
+    // ----------------------------------------
+    // sprPtr += $10 (next sprite)
+    // ----------------------------------------
+    clc
+    lda sprPtrLo
+    adc #$10
+    sta sprPtrLo
+    bcc no_inc_hi3
+    inc sprPtrHi
+no_inc_hi3:
+
+    // logoCount--
+    lda logoCount
+    sec
+    sbc #1
+    sta logoCount
+    lbne loc_8cbd
+
+/**********************************
+* Character RAM writes (dot, i, ®)*
+**********************************/
+
+/**
+ * Character RAM writes (dot, i, ®)
+ * Store accumulator to calculated screen position
+ * 
+ * This calculates a specific screen position for placing a character:
+ * - SCREEN_BASE: Base address of screen memory
+ * - RRB_Tail: Variable representing offset for RRB
+ * - $665/$40: Division (calculating row/column positioning)
+ * - Note: arcade uses a rowsize of $40 / 64 for each row.
+ * - $665-1: Final offset adjustment
+ * $665>>6 is effectively $665/$40 which calculates the row
+ * Arcade uses a rowsize of $40 / 64
+ * The comment indicates this places a "dot above the i" character
+ * at a specific calculated screen coordinate
+ */
+
+
+    lda #$AE
+	//sta $5E65-1
+    sta SCREEN_BASE+(RRB_Tail_words	*2*($665>>arcadeRowSize))+$665-1 // dot above the i
+	lda #$9F
+	//sta $5EA5-1
+    sta SCREEN_BASE+(RRB_Tail_words	*2*($6a5>>arcadeRowSize))+$6a5-1 // the i
+	lda #$BD
+	sta SCREEN_BASE+(RRB_Tail_words	*2*($6a7>>arcadeRowSize))+$6a7-1 // (r)
+	//sta $5EA7-1
+	
+loc_8cde:
+	lda #$10
+    sta byte_f2      // B = $10
+loc_8ce0:
+	jmp	sub_80a1
+	
+loc_8c44://Playfield/HighScore state
+	
+	jmp *
+loc_8c5b:
+	jmp *
+loc_8cf6:
+	jmp *
+loc_8de2:
+	jmp *
+	
+	
+
 
 /* Waterfall code*/
 
