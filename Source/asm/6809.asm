@@ -195,11 +195,13 @@ Flags.N = (A & $80)
 !u_greater:
     lda #0
     sta Flags
-    rts
+    jmp !done+
+
 !u_less:
     lda #1
     sta Flags
-    rts
+
+!done:
 }
 
 .macro CMPX(val) {
@@ -215,11 +217,13 @@ Flags.N = (A & $80)
 !x_greater:
     lda #0
     sta Flags
-    rts
+    jmp !done+
+
 !x_less:
     lda #1
     sta Flags
-    rts
+
+!done:
 }
 
 
