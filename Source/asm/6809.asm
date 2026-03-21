@@ -151,6 +151,13 @@ Flags.N = (A & $80)
     sta U_H
 }
 
+.macro LDY(addr) {
+    lda #<addr
+    sta Y_L
+    lda #>addr
+    sta Y_H
+}
+
 .macro LDX(addr) {
     lda #<addr
     sta X_L
@@ -165,6 +172,26 @@ Flags.N = (A & $80)
 !:
 }
 
+.macro ADDX(imm) {
+    clc
+    lda X_L
+    adc #<imm
+    sta X_L
+    lda X_H
+    adc #>imm
+    sta X_H
+}
+
+.macro ADDY(imm) {
+    clc
+    lda Y_L
+    adc #<imm
+    sta Y_L
+    lda Y_H
+    adc #>imm
+    sta Y_H
+}
+
 
 // U += imm16
 .macro ADDU(imm) {
@@ -176,6 +203,21 @@ Flags.N = (A & $80)
     adc #>imm
     sta U_H
 }
+
+
+.macro DAA_A() {
+    cmp #$0a
+    bcc !no_low+
+    clc
+    adc #$06
+!no_low:
+    cmp #$a0
+    bcc !done+
+    clc
+    adc #$60
+!done:
+}
+
 .macro CMPU(val) {
     // compare U with val, set Flags bit0 like 6809 C
     // C6809 = 1 if U < val, else 0
@@ -264,3 +306,13 @@ Flags.N = (A & $80)
 !:
 }
 
+
+.macro STD_ZERO_POSTINC_X() {
+    lda #0
+    ldy #0
+    sta (X_L),y
+    iny
+    sta (X_L),y
+    INC16(X_L, X_H)
+    INC16(X_L, X_H)
+}
