@@ -1006,6 +1006,124 @@ locret_8445:
 .const zp_glyph_index		= byte_6
 
 
+loc_867e:
+    lda #$1f
+    sta B_Register
+    jsr sub_80a1
+    LDX(SCREEN_BASE+(RRB_Tail_words*2*($1d1>>arcadeRowSize))+$1d1-1) // $59d1
+
+    lda X_L
+    sta byte_fd
+    lda X_H
+    sta byte_fe
+
+    LDU(data_5520) 	// $5520, pointer to high score table.
+    lda U_L
+    sta WORK_RAM1+$1D0 // word_5200
+    lda U_H
+    sta WORK_RAM1+$1D1 // word_5200+1
+
+    lda #$0a
+    sta byte_ff
+
+loc_8692:
+    lda byte_fd
+    sta X_L
+    lda byte_fe
+    sta X_H
+
+    lda WORK_RAM1+$1D0 // word_5200
+    sta U_L
+    lda WORK_RAM1+$1D1 // word_5200+1
+    sta U_H
+
+    jsr sub_88c5	// prints high scores
+    jsr sub_8922	// prints high scores
+	
+loc_869d:
+	lda byte_fd
+	sta X_L
+	lda byte_fe
+	sta X_H
+
+	lda WORK_RAM1+$1D0 // word_5200
+    sta U_L
+    lda WORK_RAM1+$1D1 // word_5200+1
+    sta U_H
+
+	ADDU(1)
+	ADDX($12)
+	jsr sub_890f
+
+	lda byte_fd
+	sta X_L
+	lda byte_fe
+	sta X_H
+
+	lda WORK_RAM1+$1D0 // word_5200
+    sta U_L
+    lda WORK_RAM1+$1D1 // word_5200+1
+    sta U_H
+
+	ADDX($1a)
+	ADDU(4)
+
+/****************************
+*Player name high score loop*
+*****************************/
+    lda #10
+    sta Y_L
+    lda #0
+    sta Y_H
+loc_86b8:
+    ldy #0
+    lda (U_L),y          // read one name byte
+    sta (X_L),y          // write to cell low byte
+    ADDU(1)              // next source byte
+
+    INC16(X_L, X_H)      // skip cell high byte
+    INC16(X_L, X_H)      // next cell low byte
+
+    dec Y_L
+    bne loc_86b8
+
+    lda byte_fd
+    sta X_L
+    lda byte_fe
+    sta X_H
+    //ADDX($80) // advance two rows.
+	
+	/*
+	translated_row_step = $40 + (RRB_Tail_words * 2)
+                    = $40 + $F4
+                    = $134
+					
+	translated_2row_step = 2 * $134 = $268
+	
+	*/
+	
+	ADDX(($40 + (RRB_Tail_words * 2))<<1) // #$268
+    lda X_L
+    sta byte_fd
+    lda X_H
+    sta byte_fe
+
+    lda WORK_RAM1+$1D0 // word_5200
+    sta U_L
+    lda WORK_RAM1+$1D1 // word_5200+1
+    sta U_H
+    ADDU($0e)
+    lda U_L
+	sta WORK_RAM1+$1D0 // word_5200
+	lda U_H
+	sta WORK_RAM1+$1D1 // word_5200+1
+	
+    dec byte_ff
+    lbne loc_8692
+    rts
+	
+	
+
 /*****************
 *Splash Screen   *
 *Prints          *
@@ -1222,16 +1340,163 @@ TextDone:
     jmp loc_807c     // IMPORTANT: return to the state machine
 */
 	
-loc_8808: // not sure what this is for
+loc_8808: // seems to get called when you press start
+	jmp *
 
-loc_8824: // to do
+loc_8824:	// to do - gets called during demo.
+	jmp *
 
+sub_88c5:
+    ldy #0
+    lda (U_L),y
+    bne loc_88d1
+
+    lda #$10
+    jsr sub_891f
+    jsr sub_891f
+    bra loc_88df
+
+loc_88d1:
+	lsr
+	lsr
+	lsr
+	lsr
+	bne loc_88d9
+	lda #$10
+	
+loc_88d9:
+	jsr sub_891f
+	ldy #0
+	lda (U_L),y
+	jsr loc_891d
+	
+loc_88df:
+	ldy #0
+	lda (U_L),y
+
+	ldy #1
+	ora (U_L),y
+	bne loc_88ed
+
+	lda #$10
+	jsr sub_891f
+	jsr sub_891f
+	bra loc_8901
+	
+loc_88ed:
+	ldy #1
+	lda (U_L),y
+	lsr
+	lsr
+	lsr
+	lsr
+	bne loc_88fb
+
+	ldy #0
+	lda (U_L),y
+	bne loc_88fb
+
+	lda #$10
+	
+loc_88fb:
+	jsr sub_891f
+
+	ldy #1
+	lda (U_L),y
+	jsr loc_891d
+
+loc_8901:
+	ldy #0
+	lda (U_L),y
+	ldy #1
+	ora (U_L),y
+	beq sub_890f
+
+	ldy #2
+	lda (U_L),y
+	lsr
+	lsr
+	lsr
+	lsr
+	bra loc_8919
+
+	
+sub_890f:
+	ldy #2
+	lda (U_L),y
+	lsr
+	lsr
+	lsr
+	lsr
+	bne loc_8919
+	lda #$10
+	
+loc_8919:
+	jsr sub_891f
+
+	ldy #2
+	lda (U_L),y
+
+loc_891d:
+    and #$0f
+	
+/*sub_891f:
+	ldy #0
+	sta (X_L),y
+	INC16(X_L, X_H)
+	rts
+*/
+
+	
+sub_891f:
+    ldy #0
+    sta (X_L),y        // write character/tile low byte only
+    INC16(X_L, X_H)    // skip high byte
+    INC16(X_L, X_H)    // advance to next cell low byte
+    rts
+	
+	
+sub_8922:
+    // lda -4,x
+    sec
+    lda X_L
+    sbc #4
+    sta tmp
+    lda X_H
+    sbc #0
+    sta tmp+1
+
+    ldy #0
+    lda (tmp),y
+    cmp #$10
+    bne loc_892a
+
+    // sta -2,x   (store the same A we just loaded)
+    sec
+    lda X_L
+    sbc #2
+    sta tmp
+    lda X_H
+    sbc #0
+    sta tmp+1
+
+    ldy #0
+    lda #$10     // same value as loaded, because branch only falls through if A == $10
+    sta (tmp),y
+
+loc_892a:
+    // clr ,x
+    ldy #0
+    lda #0
+    sta (X_L),y
+    rts
+	
 /*****************************
 // Player 1 and Player 2 lives*
 *****************************/
 
 loc_892d: 
-	
+	jmp *
 
 	
 /******************************
@@ -1253,7 +1518,6 @@ loc_897d:
 loc_898f:
     jsr sub_8b30
 
-	
     jsr BuildSpriteQueueFromArcadeRAM
 	jsr BuildPixieListFromSpriteQueue
 	jsr RRB_BuildAllRows     // builds tails for every row from pixie list
@@ -2160,9 +2424,57 @@ dontIncsprPtrHi:
 locret_8c43:
 	rts
 	
+/**********************
+HighScore state       *
+Draws High Score Table*
+***********************/
+
+loc_8c44:    
+    dec byte_ca
+    bne loc_8c4f
+
+    inc byte_c4
+    lda #0
+    sta byte_c5
+    sta byte_cf
+    rts
+
+locret_8c4e:
+    rts
+	
+loc_8c4f:
+    lda byte_ca
+    cmp #$9a
+    bne locret_8c4e
+	jsr loc_867e
+    jmp loc_8cde
+
+loc_8c5b:
+    lda byte_ca
+    cmp #$a0
+    bne loc_8c83
+
+    lda byte_e2
+    bne locret_8c82
+
+    LDX(da06)          // X = address of table da06
+    CLRB()
+
+    lda byte_cf
+    bne loc_8c6e
+    inc B_Register
+	
+loc_8c6e: // ocation after clearing high score
+	jmp *
+	
+locret_8c82:
+	rts
+	
+loc_8c83:
+	
+	
 // clear tile bits for Konami logo + copyright
 
-.const arcadeRowSize = 6 // offset/0x40
 
 sub_8ca5:
 	/*
@@ -2346,11 +2658,7 @@ loc_8cde:
 loc_8ce0:
 	jmp	sub_80a1
 	
-loc_8c44://Playfield/HighScore state
-	
-	jmp *
-loc_8c5b:
-	jmp *
+
 loc_8cf6:
 	jmp *
 loc_8de2:
