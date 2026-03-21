@@ -2,11 +2,11 @@
 
 /***********************************
 *0x4000 W  control port            *
-*bit 0 - flip screen		0x1    *
-*bit 1 - NMI enable			0x2    *
-*bit 2 - IRQ enable			0x4    *
-*bit 3 - coin counter A		0x8    *
-*bit 4 - coin counter B		0x10   *
+*bit 0 - flip screen			0x1   *
+*bit 1 - NMI enable			0x2   *
+*bit 2 - IRQ enable			0x4   *
+*bit 3 - coin counter A		0x8   *
+*bit 4 - coin counter B		0x10  *
 ***********************************/
 byte_4000_shadow: .byte 0
 
@@ -85,15 +85,16 @@ d562_u:
 	
 
 /***********************************************************
-* 						ENEMY NAMES						   *
-*                    ------------						   *
-*Code read ascii character and coverts this to a tile #    *
-*ie..'B' which is 0x42-0x30 becomes 0x12				   *
-*														   *
-* Routine start reading from end of string and reads 	   *
-* backwards until null char is hit.						   *
+* 						ENEMY NAMES							 *
+*                    ------------							 *
+*Code read ascii character and coverts this to a tile #	 *
+*ie..'B' which is 0x42-0x30 becomes 0x12					 *
+*																 *
+* Routine start reading from end of string and reads 		 *
+* backwards until null char is hit.							 *
 ***********************************************************/
 
+//				   B   U   C   H   U
 	.byte $30,$40,$42,$55,$43,$48,$55 	// @BUCHU
 buchu: 
 
@@ -134,24 +135,24 @@ blues:
 
 d562:
 	.word sub_87cf // (c) KONAMI 1985 
-	.word loc_8808
-	.word loc_8824
-	.word loc_892d 
+	.word loc_8808 // to do - ??? gets called when you press start
+	.word loc_8824 // to do - ??? gets called in game or demo
+	.word loc_892d // to do - Player 1 and Player 2 lives
 	
 /*************************************
 * Address pointers to text structures*
 *************************************/
 
 d56a:					
-	.word pressStartButton		//D5B2
-	.word onePlayerOnly			//D5C7
+	.word pressStartButton	//D5B2
+	.word onePlayerOnly		//D5C7
 	.word oneOrTwoPlayers		//D5D9
 	.word hotFightingHistory	//D5EE
-	.word masterhandHistory		//D605
+	.word masterhandHistory	//D605
 	.word doYourBest			//D61A
-	.word playerOne				//D667
-	.word playerOne				//D667
-	.word playerTwo				//D674
+	.word playerOne			//D667
+	.word playerOne			//D667
+	.word playerTwo			//D674
 	.word gameOver				//D681
 	.word TwoUp					//D68E
 	.word OneUp					//D694
@@ -163,7 +164,7 @@ d56a:
 	.word nextOpponent			//D6DE
 	.word ram1ok				//D6EE
 	.word rambad				//D71C
-	.word colorTest				//D728
+	.word colorTest			//D728
 	.word ioTest				//D74F
 	.word CoinCounter1			//D807
 	.word DipSWSelect			//D818
@@ -171,7 +172,7 @@ d56a:
 	.word FreePlay				//D8A3
 	.word Table					//D8B0
 	.word UpRight				//D8BB
-	.word SoundTest				//D8C6
+	.word SoundTest			//D8C6
 	.word Invalidity			//D8E0
 	.word Time					//D8ED
 	.word scoreRanking			//D8F4
@@ -305,7 +306,7 @@ credit:
 konami1985:
 	// -1 is to compensate for reversed [tile, attr] ordering.
 	// $713>>6 is effectively $713/$40 which calculates the row
-	.word SCREEN_BASE+(RRB_Tail_words*2*($713>>6))+$713-1 // was $5F13-1
+	.word SCREEN_BASE+(RRB_Tail_words*2*($713>>arcadeRowSize))+$713-1 // was $5F13-1
 	.byte $3A,$40,$4B,$4F,$4E,$41,$4D,$49,$40,$31,$39,$38,$35	// (C)@KONAMI@1985
 	.byte $3F
 
@@ -513,35 +514,35 @@ Playb:
 	
 FreePlay:
 	.word $5989
-	.byte $46,$52,$45,$45,$40,$50,$4C,$41,$59,$40									 //FREE@PLAY@
+	.byte $46,$52,$45,$45,$40,$50,$4C,$41,$59,$40								//FREE@PLAY@
 	.byte $3F
 	
 Table:
 	.word $5E4D
-	.byte $54,$41,$42,$4C,$45,$40,$40,$40											 //TABLE@@@
+	.byte $54,$41,$42,$4C,$45,$40,$40,$40										//TABLE@@@
 	.byte $3F
 	
 UpRight:
 	.word $5E4D
-	.byte $55,$50,$40,$52,$49,$47,$48,$54											 //UP@RIGHT
+	.byte $55,$50,$40,$52,$49,$47,$48,$54										//UP@RIGHT
 	.byte $3F
 	
 
 SoundTest:
 	.word $5AD5
-	.byte $53,$4F,$55,$4E,$44,$40,$54,$45,$53,$54									 //SOUND@TEST
+	.byte $53,$4F,$55,$4E,$44,$40,$54,$45,$53,$54								//SOUND@TEST
 	.byte $2F
 	
 
 SoundCode:
 	.word $5B53
-	.byte $53,$4F,$55,$4E,$44,$40,$43,$4F,$44,$45									 //SOUND@CODE
+	.byte $53,$4F,$55,$4E,$44,$40,$43,$4F,$44,$45								//SOUND@CODE
 	.byte $3F
 	
 
 Invalidity:
 	.word $5989
-	.byte $49,$4E,$56,$41,$4C,$49,$44,$49,$54,$59									 //INVALIDITY
+	.byte $49,$4E,$56,$41,$4C,$49,$44,$49,$54,$59								//INVALIDITY
 	.byte $3F
 	
 Time:	
@@ -555,75 +556,75 @@ Time:
 ************/
 	
 scoreRanking:
-	.word $58D5	// video memory location
-	.byte $53,$43,$4F,$52,$45,$40,$52,$41,$4E,$4B,$49,$4E,$47						 //SCORE@RANKING
+	.word SCREEN_BASE+(RRB_Tail_words*2*($d5>>arcadeRowSize))+$d5-1		//.word $58D5	// video memory location
+	.byte $53,$43,$4F,$52,$45,$40,$52,$41,$4E,$4B,$49,$4E,$47			   //SCORE@RANKING
 	.byte $2F
 	
 rankPointStageName:
-	.word $5945
+	.word SCREEN_BASE+(RRB_Tail_words*2*($145>>arcadeRowSize))+$145-1 	// .word $5945
 	.byte $52,$41,$4E,$4B,$40,$40,$50,$4F,$49,$4E,$54,$40,$40,$40,$53,$54,$41,$47,$45,$40,$40,$40,$4E,$41,$4D,$45
 	.byte $2F
 	
 first:	
-	.word $59C5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($1c5>>arcadeRowSize))+$1c5-1 //.word $59C5
 	.byte $31,$53,$54	//1ST
 	.byte $2F
 second:
-	.word $5A45
+	.word SCREEN_BASE+(RRB_Tail_words*2*($245>>arcadeRowSize))+$245-1 //.word $5A45
 	.byte $32,$4E,$44	//2ND
 	.byte $2F
 	
 third:
-	.word $5AC5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($2c5>>arcadeRowSize))+$2c5-1 //.word $5AC5
 	.byte $33,$52,$44	//3RD
 	.byte $2F
 	
 fourth:	
-	.word $5B45
+	.word SCREEN_BASE+(RRB_Tail_words*2*($345>>arcadeRowSize))+$345-1 //.word $5B45
 	.byte $34,$54,$48	//4TH
 	.byte $2F
 	
 fifth:
-	.word $5BC5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($3c5>>arcadeRowSize))+$3c5-1 //.word $5BC5
 	.byte $35,$54,$48	//5TH
 	.byte $2F
 	
 sixth:
-	.word $5C45
+	.word SCREEN_BASE+(RRB_Tail_words*2*($445>>arcadeRowSize))+$445-1 //.word $5C45
 	.byte $36,$54,$48	//6TH
 	.byte $2F
 	
 seventh:
-	.word $5CC5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($4c5>>arcadeRowSize))+$4c5-1 //.word $5CC5
 	.byte $37,$54,$48	//7TH
 	.byte $2F
 	
 eighth:
-	.word $5D45
+	.word SCREEN_BASE+(RRB_Tail_words*2*($545>>arcadeRowSize))+$545-1 //.word $5D45
 	.byte $38,$54,$48	//8TH
 	.byte $2F
 	
 ninth:
-	.word $5DC5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($5d5>>arcadeRowSize))+$5c5-1 //.word $5DC5
 	.byte $39,$54,$48	//9TH
 	.byte $2F
 	
 tenth:
-	.word $5E45
+	.word SCREEN_BASE+(RRB_Tail_words*2*($645>>arcadeRowSize))+$645-1 //.word $5E45
 	.byte $31,$30,$54,$48 //10TH
 	.byte $3F
 	
 OneUpb:
-	.word $58C5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($c5>>arcadeRowSize))+$c5-1 //.word $58C5
 	.byte $31,$55,$50	//1UP
 	
 TwoUpb:
-	.word $58C5
+	.word SCREEN_BASE+(RRB_Tail_words*2*($c5>>arcadeRowSize))+$c5-1 //.word $58C5
 	.byte $32,$55,$50	//2UP
 	.byte $3F
 	
 timeOver:
-	.word $5B55
+	.word SCREEN_BASE+(RRB_Tail_words*2*($255>>arcadeRowSize))+$255-1 //.word $5B55
 	.byte $54,$49,$4D,$45,$40,$4F,$56,$45,$52 //TIME@OVER
 	.byte $3F
 	
@@ -686,7 +687,7 @@ da5a:
 ***************/
 
 	.byte	$28,$61	 // Y coord,X coord
-	.byte	$02,$41  // Tile#, [FlipX ( bit 6 ) + Page ( 2nd page )] <== these will change according to our sprite sheet.
+	.byte	$02,$41 	 // Tile#, [FlipX ( bit 6 ) + Page ( 2nd page )] <== these will change according to our sprite sheet.
 	
 	
 /**************
@@ -745,8 +746,8 @@ Calculation: Start at page 2 + page# of sprite * 2.
 Find tile offset: 13 
 */
 
-RRB_PixieProtoType: // set this to a blank tile and move off screen
-	.byte 255, 0	// raster (move offscreen-ish) , 255,0
+RRB_PixieProtoType: // set this to a blank tile and move off screen, say 0xff. for now we want to see them all as we troubleshoot
+	.byte 255, 1	// raster (move offscreen-ish) , 255,0
 	.byte 69, $06	// tile (will be offset by TILE_OFFSET)
 	.byte 64, 1		// gotox (64,1 == 320 EOL)
 		
