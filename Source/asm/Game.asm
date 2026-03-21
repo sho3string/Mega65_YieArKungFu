@@ -947,7 +947,19 @@ pix_loop:
     rts
 
 	
-loc_8242: // from function table at D9F0
+loc_8242: // from function table at D9F0, to do.
+
+sub_841e:
+    lda byte_ef
+    and #$04
+    bne sub_842c
+
+    lda byte_e1
+    beq sub_842c
+
+    lda byte_e0
+    bne loc_8436
+
 
 /*************************
 * Check Cocktail mode    *
@@ -996,7 +1008,16 @@ loc_8443:
 *locret_8445 — return*
 **********************/
 locret_8445:
-    rts
+    rts	
+	
+/***********
+* Game Over*
+***********/
+
+sub_8446: // to do
+loc_844e: // to do
+sub_85b3: // to do
+	jmp *
 	
 .const zp_script_lo		= byte_0    // pointer into current text script
 .const zp_script_hi		= byte_1
@@ -1122,7 +1143,8 @@ loc_86b8:
     lbne loc_8692
     rts
 	
-	
+sub_86f6: // to do
+	jmp *
 
 /*****************
 *Splash Screen   *
@@ -2464,17 +2486,94 @@ loc_8c5b:
     bne loc_8c6e
     inc B_Register
 	
-loc_8c6e: // ocation after clearing high score
-	jmp *
+loc_8c6e: // location after clearing high score
+    lda B_Register
+    sta byte_cf
+
+    asl B_Register              // ASLB: multiply table index by 2
+
+    // tmp = X + B_Register
+    clc
+    lda X_L
+    adc B_Register
+    sta tmp
+    lda X_H
+    adc #0
+    sta tmp+1
+
+    // load word from [tmp] into X
+    ldy #0
+    lda (tmp),y
+    sta X_L
+    iny
+    lda (tmp),y
+    sta X_H
+
+    // stx word_520A
+    lda X_L
+    sta WORK_RAM1+$1DA          // adjust if your word_520A is elsewhere
+    lda X_H
+    sta WORK_RAM1+$1DB
+
+    lda #1
+    sta byte_ca
+    sta WORK_RAM1+$1DE          // word_520E low byte? see note below
+
+    jsr sub_8d71
+
+    lda #0
+    sta byte_c5
+    rts
 	
 locret_8c82:
 	rts
 	
 loc_8c83:
+	lda WORK_RAM1+$1DA
+	sta X_L
+	lda WORK_RAM1+$1DB
+	sta X_H
+
+	lda WORK_RAM1+$1DE
+	sta B_Register
+
+	clc
+	lda X_L
+	adc #1
+	sta tmp
+	lda X_H
+	adc #0
+	sta tmp+1
+
+	ldy #0
+	lda (tmp),y
+	sta B_Register
+	sta FB_L
+
+	dec WORK_RAM1+$1DE
+	bne loc_8ca2
+
+    ADDX(2)
+
+    lda X_L
+    sta WORK_RAM1+$1DA
+    lda X_H
+    sta WORK_RAM1+$1DB
+
+    ldy #0
+    lda (X_L),y
+    sta WORK_RAM1+$1DE
+    iny
+    lda (X_L),y
+    sta B_Register
+    sta FB_L
+
+loc_8ca2:
+    jmp loc_8de2
+	
 	
 	
 // clear tile bits for Konami logo + copyright
-
 
 sub_8ca5:
 	/*
@@ -2659,13 +2758,519 @@ loc_8ce0:
 	jmp	sub_80a1
 	
 
-loc_8cf6:
+loc_8cf6:// to do. code goes here when credit is inserted
 	jmp *
-loc_8de2:
-	jmp *
-	
-	
 
+loc_8d0c: // to do.
+	jmp *
+	
+sub_8d71:
+	lda #0
+	sta byte_e0
+	bra loc_8d8b
+
+
+loc_8d75:
+	lda #$98
+	sta A_Register
+	lda #$01
+	sta B_Register
+
+loc_8d78:
+	lda B_Register
+	sta byte_e0
+
+	lda WORK_RAM1+$1DF       // word_520E+1
+	bne loc_8d89
+
+	lda A_Register
+	clc
+	adc byte_c2
+	DAA_A()
+	sta byte_c2
+	sta A_Register
+
+	lda #1
+	jsr loc_80a2
+
+loc_8d89:
+	inc byte_c3
+	
+loc_8d8b:
+	lda byte_e2
+	beq loc_8d9b
+
+	lda #0
+	sta WORK_RAM1+$1E0       // word_5210 low
+	sta WORK_RAM1+$1E1       // word_5210 high
+	sta WORK_RAM1+$1E2       // word_5212 low
+	sta WORK_RAM1+$1E3       // word_5212 high
+	sta WORK_RAM1+$1E4       // word_5214 low
+	sta WORK_RAM1+$1E5       // word_5214 high
+	
+loc_8d9b:
+    sta byte_c6
+    sta byte_e1
+    sta byte_c5
+    sta WORK_RAM1+$1F1       // word_5221
+
+    jsr sub_814c
+    jsr sub_8dc7
+
+    lda byte_c9
+    sta WORK_RAM2+$30       // word_5460
+    sta WORK_RAM2+$60       // word_5490
+
+    lda byte_cb
+    sta WORK_RAM2+$33       // word_5463 low
+    sta WORK_RAM2+$63       // word_5493 low
+
+    lda byte_cc
+    sta WORK_RAM2+$33       // word_5463 high
+    sta WORK_RAM2+$63       // word_5493 high
+
+    lda byte_e2
+    bne locret_8dc6
+
+    lda byte_cf
+    beq loc_8dc3
+
+    lda #2
+
+loc_8dc3:
+    sta WORK_RAM1+$461       // word_5460+1
+	
+locret_8dc6:
+    rts
+	
+sub_8dc7:
+    LDX(WORK_RAM2) 		// $5430
+loc_8dcd:
+    STD_ZERO_POSTINC_X()
+    CMPX(WORK_RAM2+$8d)	// $54bd
+    BCS(loc_8dcd)
+loc_8dd4:
+    LDX(WORK_RAM2+$90)		// $54c0
+loc_8dda:
+    STD_ZERO_POSTINC_X()
+    CMPX(WORK_RAM2+$ed)	// $551d
+    BCS(loc_8dda)
+    rts
+	
+/****************************
+* DA70 - Jump Table Handler 1*
+*****************************/	
+	
+loc_8de2:
+	lda byte_c6
+	asl
+	tax
+	lda da70,x		// ptr to jump table.
+	sta byte_5
+	lda da70+1,x
+	sta byte_6
+	jmp (byte_5)
+
+loc_8dea:
+    jsr sub_8115
+    bne locret_8df2
+loc_8df0:
+    inc byte_c6
+
+locret_8df2:
+    rts						// returns to 0x8994
+	
+loc_8df3:
+    LDU(WORK_RAM2)			// #$5430		
+    LDX(WORK_RAM2+$30)		// #$5460
+
+    lda byte_e0
+    beq loc_8e04
+
+    lda byte_e1
+    beq loc_8e04
+
+    LDX(WORK_RAM2+$60)		// #$5490
+
+loc_8e04:
+    // ldd ,x++
+    ldy #0
+    lda (X_L),y
+    sta A_Register
+    iny
+    lda (X_L),y
+    sta B_Register
+    INC16(X_L, X_H)
+    INC16(X_L, X_H)
+
+    // std ,u++
+    ldy #0
+    lda A_Register
+    sta (U_L),y
+    iny
+    lda B_Register
+    sta (U_L),y
+    INC16(U_L, U_H)
+    INC16(U_L, U_H)
+
+    CMPU(WORK_RAM2+$30)	  // $5460
+    BCS(loc_8e04)
+
+    inc byte_c6
+
+    lda #0
+    sta WORK_RAM1+$1D6      // word_5206 low
+    sta byte_c7
+
+    lda WORK_RAM2+$2       // word_5432
+    bne locret_8e1d
+
+    inc WORK_RAM2+$2       // word_5432
+locret_8e1d:
+    rts
+
+/****************************
+* DA70 - Jump Table Handler 2*
+*****************************/	
+
+loc_8e1e:
+	lda byte_c7
+	asl
+	tax
+	lda da82,x
+	sta byte_5
+	lda da82+1,x
+	sta byte_6
+	jmp (byte_5)
+
+
+loc_8e26:
+	jsr sub_8115
+	bne locret_8e4e
+
+	jsr loc_c67a
+
+	lda byte_e0
+	beq loc_8e3a
+
+	lda #7
+	clc
+	adc byte_e1
+	sta B_Register
+	jsr sub_80a1
+	
+	
+/*********************
+* Prints Stage Number*
+**********************/
+
+loc_8e3a:
+	lda #$0d
+	sta B_Register
+	jsr sub_80a1
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($4a3>>arcadeRowSize))+$4a3-1)		// $5ca3
+	LDU(WORK_RAM2)	// $5430
+	jsr sub_890f	// prints 1 for stage for stage 1.
+	lda #$20
+	sta byte_fd
+	inc byte_c7
+locret_8e4e:
+	rts
+
+loc_8e4f:
+	dec byte_fd
+	bne locret_8e57
+	inc byte_c7
+	lda #0
+	sta byte_c5
+locret_8e57:
+	rts
+
+
+loc_8e58: // code is active when game has started - stage 1
+    jsr sub_8115
+    bne locret_8e57
+    inc byte_c7
+
+    lda #0
+    sta WORK_RAM1+$1D6      // word_5206 low
+    jmp loc_a7db
+
+loc_8e60:
+    lda #0
+    sta WORK_RAM1+$1D6      // word_5206
+    jmp loc_a7db
+
+loc_8e66:
+    jsr sub_86f6			//  to do.
+    lda #0
+    sta WORK_RAM2+$09       // word_5439 low
+    sta WORK_RAM2+$0A       // word_5439 high
+    rts
+	
+sub_8e6f:
+	// ldd ,x
+	ldy #0
+	lda (X_L),y
+	sta A_Register          // high byte
+	iny
+	lda (X_L),y
+	sta B_Register          // low byte
+
+	// addd #1
+	clc
+	lda B_Register
+	adc #1
+	sta B_Register
+	lda A_Register
+	adc #0
+	sta A_Register
+
+	// std ,x
+	ldy #0
+	lda A_Register
+	sta (X_L),y
+	iny
+	lda B_Register
+	sta (X_L),y
+
+	// bne locret_8e7c   ; test 16-bit result
+	lda A_Register
+	ora B_Register
+	bne locret_8e7c
+
+	// coma / comb / std ,x
+	lda #$ff
+	sta A_Register
+	sta B_Register
+
+	ldy #0
+	lda A_Register
+	sta (X_L),y
+	iny
+	lda B_Register
+	sta (X_L),y
+
+locret_8e7c:
+	rts
+
+/*****************
+* Game Play Loop *
+******************/
+loc_8e7d:
+	LDX(WORK_RAM2)		// $5437
+	jsr sub_8e6f
+
+	ADDX(2)
+	jsr sub_8e6f
+
+	lda byte_f0
+	and #$02
+	bne loc_8e92
+
+	lda byte_ef
+	and #$04
+	bne loc_8ea2
+
+loc_8e92:
+	lda byte_e0
+	beq loc_8ea2
+
+	lda byte_e1
+	beq loc_8ea2
+
+	lda U_L         // $F3
+	sta B_Register // $F2
+
+	lda FB_H       // $F8
+	sta FB_L       // $F7
+	
+loc_8ea2:  // to do - part of game play loop
+			//bsr.w	DO_WATERFALL				; check status for waterfall - 0x923F
+			//bsr.w	sub_9084					; 1UP flasher 0x8b=blank, B=1UP
+			//bsr.w	sub_9315					; game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
+			//bsr.w	sub_A86D					; sprite enable for enemy ?
+			//bsr.w	sub_9EA5					; draws energy bars.
+			// lots to do here.
+loc_8ef3:
+
+
+loc_8ef5:
+	lda WORK_RAM1+$1D6      // word_5206 low
+	asl
+	tax
+	lda da8e,x
+	sta byte_5
+	lda da8e+1,x
+	sta byte_6
+	jmp (byte_5)
+	
+loc_8f14: // to do
+
+loc_8f86:
+	dec byte_fd
+	bne locret_8f8e
+
+	lda #0
+	sta byte_c6
+	sta byte_c5
+
+locret_8f8e:
+    rts
+	
+loc_8f8f:
+	lda byte_c1
+	and #$bf
+	sta byte_c1
+	jsr sub_8446
+
+	lda byte_f1
+	sta B_Register
+
+	lda byte_c2
+	beq locret_8f8e
+
+	dec
+	beq loc_8fa5
+
+	lda B_Register
+	and #$10
+	bne loc_8fb8
+
+loc_8fa5:
+    lda B_Register
+    and #$08
+    bne loc_8fbf
+
+    lda byte_c6
+    bne locret_8f8e
+
+    jsr sub_85b3
+
+    lda #0
+    sta A_Register          // preserve 6809 CLRA for next routine
+
+loc_8fb1:
+    lda #1
+    sta B_Register          // LDB #1
+    sta byte_c3             // STB $C3
+    jmp loc_8d0c
+
+loc_8fb8:
+    jsr sub_85b3
+    lda #8
+    bra loc_8fb1
+
+loc_8fbf:
+    jsr sub_85b3
+    lda #6
+    bra loc_8fb1
+
+loc_8fc6:
+	lda #$02
+	sta A_Register
+	lda #$02
+	sta B_Register
+	jsr loc_80a2
+	lda byte_d4
+	sta A_Register
+	ASRA()
+	BCS(loc_8fd7)
+	ASRA()
+	BCS(loc_8fd7)
+	jsr loc_c692
+
+loc_8fd7:
+    LDU($5050)
+    jsr sub_a663
+
+    // ldd word_508C
+    lda WORK_RAM1+$5C       // $508C - $5030 = $5C
+    sta A_Register
+    lda WORK_RAM1+$5D
+    sta B_Register
+
+    // subd #$0010
+    sec
+    lda B_Register
+    sbc #$10
+    sta B_Register
+    lda A_Register
+    sbc #$00
+    sta A_Register
+
+    bcs loc_8fe7            // 6809 BCC after SUBD => no borrow; 6502 C=1 means no borrow
+
+    lda #0
+    sta A_Register
+    sta B_Register
+	
+loc_8fe7:
+    // std word_508C
+    lda A_Register
+    sta WORK_RAM1+$5C
+    lda B_Register
+    sta WORK_RAM1+$5D
+    // beq loc_8ff0
+    lda A_Register
+    ora B_Register
+    beq loc_8ff0
+    rts
+	
+loc_8fed:
+    inc WORK_RAM1+$1D6      // word_5206
+
+loc_8ff0:
+    inc WORK_RAM1+$1D6      // word_5206
+    rts
+	
+loc_8ff4:
+	lda WORK_RAM2+$0B        // word_543B
+	beq loc_8fed
+
+	lda #$00
+	sta A_Register
+	lda #$08
+	sta B_Register           // D = $0008
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($18e>>arcadeRowSize))+$18e-1) // $598e
+
+loc_8fff: // to do
+loc_901b: // to do
+loc_902b: // to do
+loc_9052: // to do
+loc_9076: // to do
+
+loc_90ad:
+    lda #5
+    sta byte_c7
+    jmp loc_8e60
+
+
+loc_90b4:
+    jsr sub_841e
+
+    lda #0
+    sta WORK_RAM1+$1F2      // word_5221+1
+
+    lda byte_e2
+    beq loc_90ad
+
+    jsr loc_c6a2
+    jsr sub_92ad
+
+    lda #3
+    sta B_Register
+
+    lda WORK_RAM2+$01       // word_5430+1
+    cmp #5
+    bcc loc_90ce
+    inc B_Register
+
+loc_90ce:
+	jmp *
+
+loc_919e:
+	jmp *
 
 /* Waterfall code*/
 
@@ -2784,6 +3389,113 @@ x_lo_ok:
 	
 locret_92ec:
     rts
+	
+sub_a663:
+	jmp *
+	
+loc_a7db:
+    lda #$10
+    sta B_Register
+
+    LDX(WORK_RAM2+$D0)	  // $5500
+
+loc_a7e0:
+    ldy #0
+    lda #0
+    sta (X_L),y          // clr ,x+
+    INC16(X_L, X_H)
+
+    dec B_Register
+    bne loc_a7e0
+
+    inc WORK_RAM2+$D1    // word_5500+1  ($5501)
+	
+    LDX(WORK_RAM1+$60)	  // $5090
+
+    lda #$20
+    sta A_Register
+    lda #$c0
+    sta B_Register
+
+    // sta 6,x
+    clc
+    lda X_L
+    adc #6
+    sta byte_5
+    lda X_H
+    adc #0
+    sta byte_6
+    ldy #0
+    lda A_Register
+    sta (byte_5),y
+
+    // stb 4,x
+    clc
+    lda X_L
+    adc #4
+    sta byte_5
+    lda X_H
+    adc #0
+    sta byte_6
+    ldy #0
+    lda B_Register
+    sta (byte_5),y
+
+    lda #$09
+    sta A_Register
+    lda #$06
+    sta B_Register
+	
+loc_a7f5:
+    // sta $e,x
+    clc
+    lda X_L
+    adc #$0e
+    sta byte_5
+    lda X_H
+    adc #$00
+    sta byte_6
+    ldy #0
+    lda A_Register
+    sta (byte_5),y
+
+    // leax $10,x
+    ADDX($10)
+
+    dec B_Register
+    bne loc_a7f5
+
+    inc WORK_RAM2+$D4      // word_5504
+    inc WORK_RAM2+$D0      // word_5500
+
+    lda WORK_RAM2+$01      // word_5430+1
+    cmp #4
+    bne loc_a81d
+
+    LDY(WORK_RAM1+$30)		// $50d0
+    jsr sub_b566
+
+    ADDY($40)
+    jsr sub_b566
+
+    ADDY($40)
+    jsr sub_b566
+
+loc_a81d: // to do
+
+sub_b566: // to do 
+	jmp *
+loc_c67a:
+	rts
+	
+// to do	
+loc_c692:
+	jmp *
+	
+// to do
+loc_c6a2:
+	jmp *
+	
 	
 // to do.
 sub_c6f3:
