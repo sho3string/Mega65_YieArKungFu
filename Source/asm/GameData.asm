@@ -1,8 +1,8 @@
 *=* "Game Data - GameData.asm"
 
-/***********************************
-*0x4000 W  control port            *
-*bit 0 - flip screen			0x1   *
+/**********************************
+*0x4000 W  control port           *
+*bit 0 - flip screen		0x1   *
 *bit 1 - NMI enable			0x2   *
 *bit 2 - IRQ enable			0x4   *
 *bit 3 - coin counter A		0x8   *
@@ -85,14 +85,14 @@ d562_u:
 	
 
 /***********************************************************
-* 						ENEMY NAMES							 *
-*                    ------------							 *
-*Code read ascii character and coverts this to a tile #	 *
-*ie..'B' which is 0x42-0x30 becomes 0x12					 *
-*																 *
-* Routine start reading from end of string and reads 		 *
-* backwards until null char is hit.							 *
-***********************************************************/
+* 						ENEMY NAMES						   *
+*                    ------------						   *
+*Code read ascii character and coverts this to a tile #	   *
+*ie..'B' which is 0x42-0x30 becomes 0x12				   *
+*														   *
+* Routine start reading from end of string and reads 	   *
+* backwards until null char is hit.						   *
+************************************************************/
 
 //				   B   U   C   H   U
 	.byte $30,$40,$42,$55,$43,$48,$55 	// @BUCHU
@@ -144,15 +144,15 @@ d562:
 *************************************/
 
 d56a:					
-	.word pressStartButton	//D5B2
-	.word onePlayerOnly		//D5C7
+	.word pressStartButton		//D5B2
+	.word onePlayerOnly			//D5C7
 	.word oneOrTwoPlayers		//D5D9
 	.word hotFightingHistory	//D5EE
-	.word masterhandHistory	//D605
+	.word masterhandHistory		//D605
 	.word doYourBest			//D61A
-	.word playerOne			//D667
-	.word playerOne			//D667
-	.word playerTwo			//D674
+	.word playerOne				//D667
+	.word playerOne				//D667
+	.word playerTwo				//D674
 	.word gameOver				//D681
 	.word TwoUp					//D68E
 	.word OneUp					//D694
@@ -164,7 +164,7 @@ d56a:
 	.word nextOpponent			//D6DE
 	.word ram1ok				//D6EE
 	.word rambad				//D71C
-	.word colorTest			//D728
+	.word colorTest				//D728
 	.word ioTest				//D74F
 	.word CoinCounter1			//D807
 	.word DipSWSelect			//D818
@@ -172,7 +172,7 @@ d56a:
 	.word FreePlay				//D8A3
 	.word Table					//D8B0
 	.word UpRight				//D8BB
-	.word SoundTest			//D8C6
+	.word SoundTest				//D8C6
 	.word Invalidity			//D8E0
 	.word Time					//D8ED
 	.word scoreRanking			//D8F4
@@ -182,8 +182,8 @@ d56a:
 	.word timeOver				//D96A
 	
 pressStartButton:
-	.word $5B11									// video ram address
-	.byte $50,$52,$45,$53,$53,$40	 			// PRESS@
+	.word $5B11								// video ram address
+	.byte $50,$52,$45,$53,$53,$40	 		// PRESS@
 	.byte $53,$54,$41,$52,$54,$40 	 		// START@
 	.byte $42,$55,$54,$54,$4F,$4E 			// BUTTON
 	.byte $3f
@@ -191,9 +191,9 @@ pressStartButton:
 
 onePlayerOnly:
 	.word $59CD
-	.byte $4F,$4E,$45							// ONE@					
+	.byte $4F,$4E,$45						// ONE@					
 	.byte $50,$4C,$41,$59,$45,$52 			// PLAYER@
-	.byte $4F,$4E,$4C,$59 						// ONLY
+	.byte $4F,$4E,$4C,$59 					// ONLY
 	.byte $3f
 
 oneOrTwoPlayers:
@@ -637,7 +637,7 @@ timeOver:
 
 d9f0:
 	.word loc_8bdd	//R=>L State 1
-	.word loc_8cf6
+	.word loc_8cf6 // ???
 	.word loc_8de2
 	.word loc_8242
 	
@@ -702,9 +702,42 @@ da5a:
 	.byte	$28,$81
 	.byte	$0C,$41
 	
+
+/*******************
+* DA70 - Jump Table*
+*******************/
+
+// 8DEA - pause/timer routine between transitions
+// 8DF3 - set up player,lives,enemy name ..etx ( copies data from 506x to 503x )
+// 8E1E - determines which method to call from table below at DA82
+// 8E7D - counters but for what ? 5437, 5439
+// 8EF5 - ?
+// 8DF0 - determines which method to call from table below at DA8E
+// 8F14 - ???
+
+da70:
+	.word loc_8dea, loc_8df3, loc_8e1e, loc_8e7d
+	.word loc_8ef5, loc_8df0, loc_8f14, loc_8f86
+	.word loc_8f8f
+	
+da82:
+	.word loc_90b4, loc_919e, loc_8e26
+	.word loc_8e4f, loc_8e58, loc_8e66
+
+da8e:
+	.word loc_8fc6, loc_8ff4
+
+da92:
+	.word loc_902b, loc_9052, loc_9076
 	
 daba:
 	.word loc_9252,loc_926D,loc_9285
+	
+dbb2:
+	.byte $C9,$BC,$BC,$BC,$BC,$BC,$BC,$BC 
+	.byte $BC,$BC,$BC,$BC,$AF,$BC,$BC,$BC
+	.byte $BC,$BC,$F8,$B4,$BC,$BC,$BC,$BC
+	.byte $BC,$BC,$BC,$BC
 
 /************************************************************
 * Pixie Data (RRB soft sprite entry)                        *
