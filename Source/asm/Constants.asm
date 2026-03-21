@@ -1,16 +1,16 @@
 // RRB variables
 
 .const RRB_PixiesPerRow			= 40
-.const RRB_Tail_words				= (RRB_PixiesPerRow * 3) + 2 				// +final GOTOX +dummy tile
-.const ROWMASK						= $08    									// color byte0 bit3
-.const GOTOX 						= $10
+.const RRB_Tail_words			= (RRB_PixiesPerRow * 3) + 2 				// +final GOTOX +dummy tile
+.const ROWMASK					= $08    									// color byte0 bit3
+.const GOTOX 					= $10
 .const TRANSPARENT 				= $80
 
 // sprite queue variables
-.const SPRITE_MAX					= 23	 									// Maximum # of sprites to queue
-.const PIXIE_MAX					= 185
+.const SPRITE_MAX				= 23	 									// Maximum # of sprites to queue
+.const PIXIE_MAX				= 185
 .const SPRITE_Q_ENTRY_SIZE		= 4											// 4 bytes per sprite. ( Y, X, TILE, ATTR )
-.const SPRITE_Q_SIZE				= 1 + (SPRITE_MAX * SPRITE_Q_ENTRY_SIZE) // 23 x 4 = 92 bytes 
+.const SPRITE_Q_SIZE			= 1 + (SPRITE_MAX * SPRITE_Q_ENTRY_SIZE) // 23 x 4 = 92 bytes 
 /*
 On arcade.
 
@@ -22,14 +22,14 @@ byte 1 - character code LSB
 */
 
 // - work ram 0x5000 - 0x57ff
-.const SPRITE_RAM1	= $7000
-.const WORK_RAM1		= $7030
-.const CMD_QUEUE		= $72C0
-.const SPRITE_RAM2	= $7400
-.const WORK_RAM2		= $7430
+.const SPRITE_RAM1	= $8000
+.const WORK_RAM1	= $8030
+.const CMD_QUEUE	= $82C0
+.const SPRITE_RAM2	= $8400
+.const WORK_RAM2	= $8430
 .const SCREEN_BASE	= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
-.const SCREEN_WIDTH 	= 256	 /* arcade is 256 - 32 characters visible */
-.const SCREEN_HEIGHT 	= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
+.const SCREEN_WIDTH = 256	 /* arcade is 256 - 32 characters visible */
+.const SCREEN_HEIGHT = 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
 .const CHARS_WIDE 	= (SCREEN_WIDTH / 8) 				// 32 characters.
 .const CHARS_HIGH 	= (SCREEN_HEIGHT / 8)				// 32 characters, 28 visible.
 .const TOTAL_CHARS  	= CHARS_WIDE + RRB_Tail_words   
@@ -65,8 +65,8 @@ byte 1 - character code LSB
 .const U_H				= $f4
 .const X_L				= $f5
 .const X_H				= $f6
-.const FB_L				= $f7
-.const FB_H				= $f8
+.const FB_L			= $f7
+.const FB_H			= $f8
 .const A_Register		= $f9
 .const Flags			= $fa
 .const tmp				= $fb
