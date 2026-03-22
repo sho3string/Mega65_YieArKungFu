@@ -316,3 +316,17 @@ Flags.N = (A & $80)
     INC16(X_L, X_H)
     INC16(X_L, X_H)
 }
+
+.macro STA_X_OFFS(offs) {
+    pha
+    clc
+    lda X_L
+    adc #<offs
+    sta byte_5
+    lda X_H
+    adc #>offs
+    sta byte_6
+    pla
+    ldy #0
+    sta (byte_5),y
+}
