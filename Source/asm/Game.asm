@@ -205,7 +205,7 @@ loc_8042:
 loc_8062:
     // A = word_5600 low byte (6809 loads 16-bit, but only A is used)
     lda SPRITE_RAM2+$200
-    //jsr sub_86D7 (ROM→RAM high score copy, not needed. See)
+    jsr sub_86d7 // (ROM→RAM high score copy)
     //jsr sub_C737 (sound/speech init) - Look at this later
     // B = 6 → A = 6
 	
@@ -1143,9 +1143,212 @@ loc_86b8:
     lbne loc_8692
     rts
 	
-sub_86f6: // to do
-	jmp *
 
+/***********************************************************
+* sub_86D7 – Initialise High Score Table                   *
+*                                                          *
+* Original arcade behaviour:                               *
+* Copies the default high score table from ROM (D477 )     *
+* into work RAM ($5520). This provides the initial high    *
+* score entries when the machine boots.                    *
+*                                                          *
+* In this port this routine is unnecessary because the     *
+* program is not running from a fixed ROM image and the    *
+* high score table can be initialised directly in RAM      *
+* (or loaded from disk/save data). Therefore this copy     *
+* routine can be omitted.                                  *
+************************************************************/
+sub_86d7:
+
+/************************************************
+* Copy high score from high score table ($5520) *
+* to active high score variable ($521C) used    *
+* for display at top of screen during gameplay. *
+*************************************************/
+
+loc_86e9:
+	lda data_5520+0	    // word_551F+1
+	sta WORK_RAM1+$1EC	 // word_521C
+	lda data_5520+1		// unk_5521 (hi byte of D)
+	sta WORK_RAM1+$1ED	// word_521C+1
+	lda data_5520+2
+	sta WORK_RAM1+$1EE	// word_521C+2
+	rts
+
+	
+sub_86f6:
+    lda WORK_RAM1+$1D6      // word_5206
+    lbne loc_8782
+    jsr loc_c6a6
+    
+	LDU(e172)
+	
+    lda WORK_RAM2+$01       // word_5430+1
+    cmp #5
+    bcc loc_8710
+
+    jsr loc_c6be
+    LDU(dbb2)
+
+/*********************************************
+* Generate Enemy Name                        *
+* - Chooses enemy name from table at $D503   *
+* - Caps index at 10                         *
+* - Each table entry is a .word pointer      *
+* - Walks the chosen string backwards        *
+* - Converts encoded chars with A -= $30     *
+* - Stops when result becomes 0              *
+* - Writes right-to-left into screen memory  *
+**********************************************/
+loc_8710:
+	// stu word_5200
+	lda U_L
+	sta WORK_RAM1+$1D0
+	lda U_H
+	sta WORK_RAM1+$1D1
+
+	// ldx #$59BF
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($1bf>>arcadeRowSize))+$1bf-1)	// $59bf
+
+	// stx $FD
+	lda X_L
+	sta byte_fd
+	lda X_H
+	sta byte_fe
+
+	lda #$21
+	sta byte_ff
+
+	lda #1
+	sta byte_ca
+
+	lda #0
+	sta B_Register
+
+	lda #3
+	jsr loc_80a2
+
+	lda #$0c
+	sta B_Register
+	jsr sub_80a1
+
+	lda #$0b
+	sta B_Register
+	jsr sub_80a1
+
+	// ldx #$597F
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($17f>>arcadeRowSize))+$17f-1)	// $597f
+
+	// ldu #$D503   ; table of word pointers
+	LDU(d503)
+
+	// ldb word_5430+1
+	lda WORK_RAM2+$01
+	sta B_Register
+
+	cmp #$0a
+	bcc loc_873f_prep
+	lda #$0a
+	sta B_Register
+
+loc_873f_prep:
+	// aslb  ; word table => *2
+	lda B_Register
+	asl
+	sta B_Register
+
+	// ldu b,u  ; load word pointer from table at U + B
+	clc
+	lda U_L
+	adc B_Register
+	sta byte_5
+	lda U_H
+	adc #0
+	sta byte_6
+
+	ldy #0
+	lda (byte_5),y
+	sta U_L
+	iny
+	lda (byte_5),y
+	sta U_H
+
+loc_8742:
+	// lda ,-u   ; predecrement U, then read
+	sec
+	lda U_L
+	sbc #1
+	sta U_L
+	lda U_H
+	sbc #0
+	sta U_H
+
+	ldy #0
+	lda (U_L),y
+
+	sec
+	sbc #$30
+	beq loc_874c
+
+	pha                     // save glyph
+	// move left one visible cell
+	sec
+	lda X_L
+	sbc #2
+	sta X_L
+	lda X_H
+	sbc #0
+	sta X_H
+	pla                     // restore glyph
+	ldy #0
+	sta (X_L),y
+	bra loc_8742
+
+/**************************
+*Generate player one score*
+**************************/
+loc_874c:
+	LDU(WORK_RAM1+$1e0)													 // original $5210
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($0c3>>arcadeRowSize))+$0c3-1)   // original $58C3
+	jsr sub_88c5
+	jsr sub_8922
+	
+/*******************************
+*Generate player one high score*
+*******************************/
+loc_8758:
+	LDU(WORK_RAM1+$1EC)													 // original $521C
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($0db>>arcadeRowSize))+$0db-1)    // original $58DB
+	jsr sub_88c5
+	jsr sub_8922
+
+/*************************************************
+* Initialise energy bar                          * 
+*                                                *
+* Arcade writes attribute bytes for flipped bar  *
+* segments to for Player one                     *
+*************************************************/
+
+loc_8764:
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($180>>arcadeRowSize))+$180-1)
+	lda #$0f
+	sta B_Register          // 15 cells
+	ADDX(2)					 // start at 0x2b38
+loc_876a:
+	ldy #0                   // attribute byte on MEGA65
+	lda #$80
+	clc
+	adc #$08				 // preserve row mask 0x8
+	sta (X_L),y
+
+	ADDX(2)
+	dec B_Register
+	bne loc_876a
+
+
+loc_8782:
+	jmp *
+	
 /*****************
 *Splash Screen   *
 *Prints          *
@@ -2836,9 +3039,8 @@ loc_8d9b:
     beq loc_8dc3
 
     lda #2
-
 loc_8dc3:
-    sta WORK_RAM1+$461       // word_5460+1
+    sta WORK_RAM2+$31       // word_5460+1
 	
 locret_8dc6:
     rts
@@ -3481,12 +3683,101 @@ loc_a7f5:
     ADDY($40)
     jsr sub_b566
 
-loc_a81d: // to do
+loc_a81d:
+	lda #6
+	sta WORK_RAM2+$DB      // word_550B+1
 
+	jsr sub_c3e6
+	cmp #4
+	lbne loc_a857
+
+	LDX(WORK_RAM1+$60)		// $5090
+
+	lda #$20
+	STA_X_OFFS($06)
+	lda #$30
+	STA_X_OFFS($26)
+	lda #$20
+	STA_X_OFFS($16)
+	lda #$30
+	STA_X_OFFS($36)
+
+	lda #$f0
+	STA_X_OFFS($24)
+	STA_X_OFFS($04)
+
+	lda #$b0
+	STA_X_OFFS($0e)
+	STA_X_OFFS($1e)
+
+	lda #$af
+	STA_X_OFFS($2e)
+	STA_X_OFFS($3e)
+
+	lda #$40
+	STA_X_OFFS($0f)
+	STA_X_OFFS($2f)
+    rts
+	
+loc_a857:
+	jsr sub_c3e6
+	beq locret_a86c
+
+	cmp #3
+	beq locret_a86c
+
+	cmp #5
+	beq locret_a86c
+
+	cmp #8
+	beq locret_a86c
+
+	jsr sub_b682
+
+locret_a86c:
+    rts
+	
 sub_b566: // to do 
 	jmp *
-loc_c67a:
+	
+sub_b682: // to do
+	jmp *
+	
+sub_c3e6:
+	CLRB()
+
+loc_c3e7:
+	lda WORK_RAM2+$01      // word_5430+1
+
+	lda B_Register
+	beq locret_c3f6
+
+	// original:
+	//   pshs x
+	//   ldx #$FF39
+	//   lda a,x
+	//   puls x
+
+	pha                    // preserve A offset
+	LDX(ff39)
+	pla
+	clc
+	adc X_L
+	sta byte_5
+	lda X_H
+	adc #0
+	sta byte_6
+	ldy #0
+	lda (byte_5),y
+
+locret_c3f6:
 	rts
+	
+	
+loc_c67a:	// to do
+	lda #$1
+	bra	loc_c6c3
+	
 	
 // to do	
 loc_c692:
@@ -3496,14 +3787,202 @@ loc_c692:
 loc_c6a2:
 	jmp *
 	
+// to do	
+loc_c6a6:
+	lda #$41
+	bra	loc_c6c3
+	
+
+// to do
+loc_c6be:
+	jmp *
+	
+loc_c6c3:
+	pha                        // preserve original A to be buffered later
+
+	lda byte_c3
+	cmp #3
+	beq loc_c6de_pop_a
+
+	lda byte_e2
+	bne loc_c6de_pop_a
+
+	lda byte_ef
+	asl
+	bcc locret_c6f0_drop_a
+
+	pla
+	pha                        // temporarily inspect original A without losing it
+	cmp #$87
+	beq locret_c6f0_drop_a
+
+	cmp #$80
+	bcs loc_c6de_pop_a
+
+	cmp #$40
+	bcs locret_c6f0_drop_a
+
+loc_c6de_pop_a:
+	pla                        // recover original byte to write
+
+	lda X_L
+	pha
+	lda X_H
+	pha
+
+	lda byte_dc
+	sta X_L
+	lda byte_dd
+	sta X_H
+
+	ldy #0
+	sta (X_L),y
+	INC16(X_L, X_H)
+
+	CMPX(CMD_QUEUE+$60)	// $5320
+	BCS(loc_c6ec)
+
+	LDX(CMD_QUEUE+$40)		// $5300
+
+loc_c6ec:
+	lda X_L
+	sta byte_dc
+	lda X_H
+	sta byte_dd
+
+	pla
+	sta X_H
+	pla
+	sta X_L
+	rts
+
+locret_c6f0_drop_a:
+	pla
+locret_c6f0:
+	rts
 	
 // to do.
 sub_c6f3:
+	jmp *
+
+
+/*************************** 
+*Initalise sound chip state* 
+* Code is commented as we  *
+* Don't have these sound   *
+* the same hardware        *
+* sub_c72b,sub_c82c        *
+* loc_c836,sub_c879        *
+* loc_c882,sub_c896        *
+****************************/
+
+
+/*
+sub_c72b:
+	nop
+	nop
+	nop
+	nop
+	nop  
+	//sta     $4800 - W  sound latch write
+	//sta     $4900 - W  copy sound latch to SN76489A
 	rts
+*/
 	
 // nmi routine
 loc_c78e:
 	rts
 
+/********************************************
+* sub_c81b - Early startup init / 3-pass probe
+*
+* Called during reset.
+*
+* What it appears to do:
+* - Sets word_5606 to 1, 2, then 3
+* - For each value, calls sub_c82c
+* - sub_c82c clears B, calls sub_c879
+* - If sub_c879 returns A == $DF, it clears B
+*   again and calls sub_c896
+* - Returns with A = 0
+*
+* This looks like a small startup hardware/config
+* probe or device init sequence.
+********************************************/
+
+sub_c81b:
+	rts // use a simple rts and ignore initialising the sound hardware
+
+/*
 sub_c81b:
 	rts
+	
+    lda #1
+    sta WORK_RAM2+$1d6      // word_5606, adjust base if needed
+
+    jsr sub_c82c
+
+    inc WORK_RAM2+$1d6      // word_5606 = 2
+    jsr sub_c82c
+
+    inc WORK_RAM2+$1d6      // word_5606 = 3
+
+    // 6809: bra *+2
+    // effectively just falls through / returns
+    rts
+	*/
+
+
+/********************************************
+* sub_c82c - One pass of startup probe      *
+*                                           *
+* - B = 0                                   *
+* - call sub_c879                           *
+* - if A == $DF, call sub_c896 with B = 0   *
+* - return A = 0                            *
+*********************************************/
+
+/*
+sub_c82c:
+	lda #0
+	sta B_Register
+	jsr sub_c879
+	cmp #$df
+	bne loc_c836
+	lda #0
+	sta B_Register
+	jsr sub_c896
+loc_c836:
+    lda #0
+    rts
+	
+sub_c879:
+	lda WORK_RAM2+$1d6
+	dec
+	asl
+	asl
+	asl
+	asl
+	asl                    // A = (word_5606 - 1) * 32
+
+loc_c882:
+    lda B_Register
+	and #$0f
+	sta WORK_RAM2+$1d6
+
+	lda #$9f
+	sec
+	sbc WORK_RAM2+$1d6
+	sta WORK_RAM2+$1d6
+
+	ora WORK_RAM2+$1d6
+	jsr sub_c72b
+    rts
+	
+sub_c896:
+	lda	#$60
+	bra	loc_c882
+
+*/
+
+	
