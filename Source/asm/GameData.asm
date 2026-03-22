@@ -1,8 +1,8 @@
 *=* "Game Data - GameData.asm"
 
-/**********************************
-*0x4000 W  control port           *
-*bit 0 - flip screen		0x1   *
+/***********************************
+*0x4000 W  control port            *
+*bit 0 - flip screen			0x1   *
 *bit 1 - NMI enable			0x2   *
 *bit 2 - IRQ enable			0x4   *
 *bit 3 - coin counter A		0x8   *
@@ -44,61 +44,32 @@ d432:
 * Address to name pointers *
 ****************************/
 
-d503:	.word d520 /*buchu*/
-d505:	.word d526 /*star*/
-d507:	.word d52d /*nunchu*/
-d509:	.word d534 /*pole*/
-d50b:	.word d53b /*feedle*/
-d50d:	.word d542 /*chain*/
-d50f:	.word d548 /*club*/
-d511:	.word d54d /*fan*/
-d513:	.word d554 /*sword*/
-d515:	.word d55b /*tonfun*/
-d517:	.word d562 /*blues*/
-
-/*************************************
-* Address pointers to enemy name text*
-**************************************/
-	
-d520:
-	.byte buchu		// 4 bytes per division
-d526:
-	.byte star
-d52d:
-	.byte nuncha
-d534:
-	.byte pole
-d53b:
-	.byte feedle
-d542:
-	.byte chain
-d548:
-	.byte club
-d54d:
-	.byte fan
-d554:
-	.byte sword
-d55b:
-	.byte tonfun
-d562_u:
-	.byte blues
-	
+d503:
+    .word buchu
+    .word star
+    .word nuncha
+    .word pole
+    .word feedle
+    .word chain
+    .word club
+    .word fan
+    .word sword
+    .word tonfun
+    .word blues
 
 /***********************************************************
-* 						ENEMY NAMES						   *
-*                    ------------						   *
-*Code read ascii character and coverts this to a tile #	   *
-*ie..'B' which is 0x42-0x30 becomes 0x12				   *
-*														   *
-* Routine start reading from end of string and reads 	   *
-* backwards until null char is hit.						   *
-************************************************************/
+* Enemy names                                              *
+*                                                          *
+* Routine reads from end of string backwards until $30     *
+* terminator is hit.                                       *
+* Therefore each label points one byte past the last char. *
+***********************************************************/
 
 //				   B   U   C   H   U
 	.byte $30,$40,$42,$55,$43,$48,$55 	// @BUCHU
 buchu: 
 
-	.byte $30,$40,$53,$54,$41,$52		// @STAR
+	.byte $30,$40,$53,$54,$41,$52			// @STAR
 star:
 
 	.byte $30,$4E,$55,$4E,$43,$48,$41	// NUNCHA
@@ -113,10 +84,10 @@ feedle:
 	.byte $30,$40,$43,$48,$41,$49,$4E	// @CHAIN
 chain:
 	
-	.byte $30,$40,$43,$4C,$55,$42		// @CLUB
+	.byte $30,$40,$43,$4C,$55,$42			// @CLUB
 club:
 
-	.byte $30,$40,$46,$41,$4E			// @FAN
+	.byte $30,$40,$46,$41,$4E				// @FAN
 fan:
 
 	.byte $30,$40,$53,$57,$4F,$52,$44	// @SWORD
@@ -144,15 +115,15 @@ d562:
 *************************************/
 
 d56a:					
-	.word pressStartButton		//D5B2
-	.word onePlayerOnly			//D5C7
+	.word pressStartButton	//D5B2
+	.word onePlayerOnly		//D5C7
 	.word oneOrTwoPlayers		//D5D9
 	.word hotFightingHistory	//D5EE
-	.word masterhandHistory		//D605
+	.word masterhandHistory	//D605
 	.word doYourBest			//D61A
-	.word playerOne				//D667
-	.word playerOne				//D667
-	.word playerTwo				//D674
+	.word playerOne			//D667
+	.word playerOne			//D667
+	.word playerTwo			//D674
 	.word gameOver				//D681
 	.word TwoUp					//D68E
 	.word OneUp					//D694
@@ -164,7 +135,7 @@ d56a:
 	.word nextOpponent			//D6DE
 	.word ram1ok				//D6EE
 	.word rambad				//D71C
-	.word colorTest				//D728
+	.word colorTest			//D728
 	.word ioTest				//D74F
 	.word CoinCounter1			//D807
 	.word DipSWSelect			//D818
@@ -172,7 +143,7 @@ d56a:
 	.word FreePlay				//D8A3
 	.word Table					//D8B0
 	.word UpRight				//D8BB
-	.word SoundTest				//D8C6
+	.word SoundTest			//D8C6
 	.word Invalidity			//D8E0
 	.word Time					//D8ED
 	.word scoreRanking			//D8F4
@@ -182,8 +153,8 @@ d56a:
 	.word timeOver				//D96A
 	
 pressStartButton:
-	.word $5B11								// video ram address
-	.byte $50,$52,$45,$53,$53,$40	 		// PRESS@
+	.word $5B11									// video ram address
+	.byte $50,$52,$45,$53,$53,$40	 			// PRESS@
 	.byte $53,$54,$41,$52,$54,$40 	 		// START@
 	.byte $42,$55,$54,$54,$4F,$4E 			// BUTTON
 	.byte $3f
@@ -191,9 +162,9 @@ pressStartButton:
 
 onePlayerOnly:
 	.word $59CD
-	.byte $4F,$4E,$45						// ONE@					
+	.byte $4F,$4E,$45							// ONE@					
 	.byte $50,$4C,$41,$59,$45,$52 			// PLAYER@
-	.byte $4F,$4E,$4C,$59 					// ONLY
+	.byte $4F,$4E,$4C,$59 						// ONLY
 	.byte $3f
 
 oneOrTwoPlayers:
@@ -734,10 +705,33 @@ daba:
 	.word loc_9252,loc_926D,loc_9285
 	
 dbb2:
-	.byte $C9,$BC,$BC,$BC,$BC,$BC,$BC,$BC 
-	.byte $BC,$BC,$BC,$BC,$AF,$BC,$BC,$BC
-	.byte $BC,$BC,$F8,$B4,$BC,$BC,$BC,$BC
-	.byte $BC,$BC,$BC,$BC
+	.byte $c9,$bc,$bc,$bc,$bc,$bc,$bc,$bc 
+	.byte $bc,$bc,$bc,$bc,$af,$bc,$bc,$bc
+	.byte $bc,$bc,$f8,$b4,$bc,$bc,$bc,$bc
+	.byte $bc,$bc,$bc,$bc
+	
+
+e172:
+	.byte $10,$83,$33,$32,$33,$83,$83,$83 
+	.byte $83,$83,$83,$83,$83,$83,$83,$83 
+	.byte $83,$83,$83,$83,$83,$83,$83,$83 
+	.byte $83,$83,$83,$83,$83,$83,$83,$83 
+	.byte $83,$83,$41,$42,$43,$83,$45,$83 
+	.byte $83,$83,$83,$83,$83,$8D,$8E,$8F 
+	.byte $8E,$81,$82,$83,$87,$86,$86,$87 
+	.byte $83,$83,$83,$83,$83,$83
+	
+
+ff39:
+	.byte $ff,$04,$03,$ff,$ff,$ff,$02,$05 
+	.byte $ff,$00,$01,$00,$00,$ff,$4c,$ff
+	.byte $65,$ff,$7e,$05,$0a,$05,$05,$05
+	.byte $05,$05,$0a,$05,$05,$0a,$05,$0a
+	.byte $05,$0a,$05,$05,$0a,$05,$05,$0a
+	.byte $05,$05,$05,$05,$04,$06,$05,$05
+	.byte $04,$06,$05,$05,$05,$04,$05,$04
+	.byte $04,$06,$05,$05,$05,$05,$05,$04
+	.byte $05,$06,$06,$06,$04,$04,$05
 
 /************************************************************
 * Pixie Data (RRB soft sprite entry)                        *
