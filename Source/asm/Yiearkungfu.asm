@@ -7,22 +7,22 @@
 
 /* ZP */
 * = $200 "Basepage - yiearkungfu.asm" virtual
-	byte_0:		.byte	$00
-	byte_1:		.byte	$00
-	byte_2:		.byte	$00
-	byte_3:		.byte	$00
-	byte_4:		.byte	$00
-	byte_5:		.byte	$00
-	byte_6:		.byte	$00
-	byte_7:		.byte	$00
-	byte_8:		.byte	$00
-	byte_9:		.byte	$00
-	byte_a:		.byte	$00
-	byte_b:		.byte	$00
-	byte_c:		.byte	$00
-	byte_d:		.byte	$00
-	byte_e:		.byte	$00
-	byte_f:		.byte	$00
+	byte_0:	.byte	$00
+	byte_1:	.byte	$00
+	byte_2:	.byte	$00
+	byte_3:	.byte	$00
+	byte_4:	.byte	$00
+	byte_5:	.byte	$00
+	byte_6:	.byte	$00
+	byte_7:	.byte	$00
+	byte_8:	.byte	$00
+	byte_9:	.byte	$00
+	byte_a:	.byte	$00
+	byte_b:	.byte	$00
+	byte_c:	.byte	$00
+	byte_d:	.byte	$00
+	byte_e:	.byte	$00
+	byte_f:	.byte	$00
 	byte_10:	.byte	$00
 	byte_11:	.byte	$00
 	byte_12:	.byte	$00
@@ -339,9 +339,7 @@ clearVars:
 	jsr loc_8163	// start game.
 }
 .const SpriteQueueCount	= SpriteQueueBuffer + 0 // first byte is the count.
-.const SpriteQueueData		= SpriteQueueBuffer + 1 // data starts at second byte
-
-//#import "Source/asm/charRamHelper.asm"
+.const SpriteQueueData	= SpriteQueueBuffer + 1 // data starts at second byte
 
 //#import "Source/asm/SidTest.asm"
 
@@ -404,6 +402,7 @@ SpriteQueueBuffer:
     .fill SPRITE_Q_SIZE, 0     // or: .fill SPRITE_Q_SIZE, 0
 
 #import "Source/asm/SpriteQueue.asm"
+#import "Source/asm/VideoRamHelper.asm"
 #import "Source/asm/Game.asm"
 #import "Source/asm/GameData.asm"
 #import "Source/asm/Irq.asm"
