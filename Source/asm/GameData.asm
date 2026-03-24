@@ -1,8 +1,8 @@
 *=* "Game Data - GameData.asm"
 
-/***********************************
-*0x4000 W  control port            *
-*bit 0 - flip screen			0x1   *
+/**********************************
+*0x4000 W  control port           *
+*bit 0 - flip screen		0x1   *
 *bit 1 - NMI enable			0x2   *
 *bit 2 - IRQ enable			0x4   *
 *bit 3 - coin counter A		0x8   *
@@ -69,7 +69,7 @@ d503:
 	.byte $30,$40,$42,$55,$43,$48,$55 	// @BUCHU
 buchu: 
 
-	.byte $30,$40,$53,$54,$41,$52			// @STAR
+	.byte $30,$40,$53,$54,$41,$52		// @STAR
 star:
 
 	.byte $30,$4E,$55,$4E,$43,$48,$41	// NUNCHA
@@ -84,10 +84,10 @@ feedle:
 	.byte $30,$40,$43,$48,$41,$49,$4E	// @CHAIN
 chain:
 	
-	.byte $30,$40,$43,$4C,$55,$42			// @CLUB
+	.byte $30,$40,$43,$4C,$55,$42		// @CLUB
 club:
 
-	.byte $30,$40,$46,$41,$4E				// @FAN
+	.byte $30,$40,$46,$41,$4E			// @FAN
 fan:
 
 	.byte $30,$40,$53,$57,$4F,$52,$44	// @SWORD
@@ -193,7 +193,7 @@ doYourBest:
 	.word $5E4D 
 	.byte $44,$4F,$40							 // DO@
 	.byte $59,$4F,$55,$52,$40 				 // YOUR@
-	.byte $42,$45,$53,$54,$5D,$5D				// BEST!!
+	.byte $42,$45,$53,$54,$5D,$5D			// BEST!!
 	.byte $2f
 
 goodLuck:
@@ -224,13 +224,13 @@ playerOne:
 
 playerTwo:
 	.word $5BD5 
-	.byte $50,$4C,$41,$59,$45,$52,$40			// PLAYER@
+	.byte $50,$4C,$41,$59,$45,$52,$40		// PLAYER@
 	.byte $54,$57,$4F							// TWO
 	.byte $3f
 	
 gameOver:
 	.word $5C55 
-	.byte $47,$41,$4D,$45,$40,$40				 // GAME@@ 
+	.byte $47,$41,$4D,$45,$40,$40			 // GAME@@ 
 	.byte $4F,$56,$45,$52						 // OVER
 	.byte $3f
 
@@ -239,26 +239,34 @@ TwoUp:
 	.byte $32,$55,$50							 // 2UP
 	.byte $3f
 
-OneUp:									 
-	.word $5883									 // character ram address
-	.byte $31,$55,$50							 // 1UP
+OneUp:
+	.word ArcadeToMegaTextByte($5883)
+	.byte $31,$55,$50
 	.byte $3f
 
-hiScore:
-	.word $5897									 // character ram address
-	.byte $48,$49,$40,$53,$43,$4F,$52,$45	 // SCORE SCORE
-	.byte $2f									 // next string
+hiScore:										// High Score
+	.word ArcadeToMegaTextByte($5897)
+	.byte $48,$49,$40,$53,$43,$4F,$52,$45
+	.byte $2f
+
+oolong:										// Oolong
+	.word ArcadeToMegaTextByte($5943)
+	.byte $4F,$4F,$4C,$4F,$4E,$47
+	.byte $2f
+
+ko:												// Ko
+	.word ArcadeToMegaTextByte($599F)
+	.byte $4B,$4F
+	.byte $3f
 	
-oolong:
-	.word $5943									 // character ram address
-	.byte $4F,$4F,$4C,$4F,$4E,$47				 // OOLONG
-	.byte $2f									 // next string
-	
+
+/*	
 ko:
-	.word $599F
+	//- This is wrong for rows that have the 8-byte pixie header before visible cells.
+	//.word SCREEN_BASE+(RRB_Tail_words*2*($19f>>arcadeRowSize))+$19f-1 // was $599F 
 	.byte $4B,$4F								 // KO
 	.byte $3f									// end.
-
+*/
 stage:
 	.word $5C97					
 	.byte $53,$54,$41,$47,$45					// STAGE
@@ -275,9 +283,7 @@ credit:
 	.byte $3f
 
 konami1985:
-	// -1 is to compensate for reversed [tile, attr] ordering.
-	// $713>>6 is effectively $713/$40 which calculates the row
-	.word SCREEN_BASE+(RRB_Tail_words*2*($713>>arcadeRowSize))+$713-1 // was $5F13-1
+	.word ArcadeToMegaTextByte($5F13)
 	.byte $3A,$40,$4B,$4F,$4E,$41,$4D,$49,$40,$31,$39,$38,$35	// (C)@KONAMI@1985
 	.byte $3F
 
@@ -527,75 +533,75 @@ Time:
 ************/
 	
 scoreRanking:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($d5>>arcadeRowSize))+$d5-1		//.word $58D5	// video memory location
+	.word ArcadeToMegaTextByte($58D5)
 	.byte $53,$43,$4F,$52,$45,$40,$52,$41,$4E,$4B,$49,$4E,$47			   //SCORE@RANKING
 	.byte $2F
 	
 rankPointStageName:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($145>>arcadeRowSize))+$145-1 	// .word $5945
+	.word ArcadeToMegaTextByte($5945)
 	.byte $52,$41,$4E,$4B,$40,$40,$50,$4F,$49,$4E,$54,$40,$40,$40,$53,$54,$41,$47,$45,$40,$40,$40,$4E,$41,$4D,$45
 	.byte $2F
 	
 first:	
-	.word SCREEN_BASE+(RRB_Tail_words*2*($1c5>>arcadeRowSize))+$1c5-1 //.word $59C5
+	.word ArcadeToMegaTextByte($59C5)
 	.byte $31,$53,$54	//1ST
 	.byte $2F
 second:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($245>>arcadeRowSize))+$245-1 //.word $5A45
+	.word ArcadeToMegaTextByte($5A45)
 	.byte $32,$4E,$44	//2ND
 	.byte $2F
 	
 third:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($2c5>>arcadeRowSize))+$2c5-1 //.word $5AC5
+	.word ArcadeToMegaTextByte($5AC5)
 	.byte $33,$52,$44	//3RD
 	.byte $2F
 	
 fourth:	
-	.word SCREEN_BASE+(RRB_Tail_words*2*($345>>arcadeRowSize))+$345-1 //.word $5B45
+	.word ArcadeToMegaTextByte($5B45)
 	.byte $34,$54,$48	//4TH
 	.byte $2F
 	
 fifth:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($3c5>>arcadeRowSize))+$3c5-1 //.word $5BC5
+	.word ArcadeToMegaTextByte($5BC5)
 	.byte $35,$54,$48	//5TH
 	.byte $2F
 	
 sixth:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($445>>arcadeRowSize))+$445-1 //.word $5C45
+	.word ArcadeToMegaTextByte($5C45)
 	.byte $36,$54,$48	//6TH
 	.byte $2F
 	
 seventh:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($4c5>>arcadeRowSize))+$4c5-1 //.word $5CC5
+	.word ArcadeToMegaTextByte($5CC5)
 	.byte $37,$54,$48	//7TH
 	.byte $2F
 	
 eighth:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($545>>arcadeRowSize))+$545-1 //.word $5D45
+	.word ArcadeToMegaTextByte($5D45)
 	.byte $38,$54,$48	//8TH
 	.byte $2F
 	
 ninth:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($5d5>>arcadeRowSize))+$5c5-1 //.word $5DC5
+	.word ArcadeToMegaTextByte($5DC5)
 	.byte $39,$54,$48	//9TH
 	.byte $2F
 	
 tenth:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($645>>arcadeRowSize))+$645-1 //.word $5E45
+	.word ArcadeToMegaTextByte($5E45)
 	.byte $31,$30,$54,$48 //10TH
 	.byte $3F
 	
 OneUpb:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($c5>>arcadeRowSize))+$c5-1 //.word $58C5
+	.word ArcadeToMegaTextByte($58C5)
 	.byte $31,$55,$50	//1UP
 	
 TwoUpb:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($c5>>arcadeRowSize))+$c5-1 //.word $58C5
+	.word ArcadeToMegaTextByte($58C5)
 	.byte $32,$55,$50	//2UP
 	.byte $3F
 	
 timeOver:
-	.word SCREEN_BASE+(RRB_Tail_words*2*($255>>arcadeRowSize))+$255-1 //.word $5B55
+	.word ArcadeToMegaTextByte($5B55)
 	.byte $54,$49,$4D,$45,$40,$4F,$56,$45,$52 //TIME@OVER
 	.byte $3F
 	
@@ -702,7 +708,7 @@ da92:
 	.word loc_902b, loc_9052, loc_9076
 	
 daba:
-	.word loc_9252,loc_926D,loc_9285
+	.word loc_9252,loc_926d,loc_9285
 	
 dbb2:
 	.byte $c9,$bc,$bc,$bc,$bc,$bc,$bc,$bc 
