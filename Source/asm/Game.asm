@@ -150,23 +150,23 @@ loc_803b:
     adc #0
     sta byte_f1
 
-    // compare pointer to $5300
+    // compare pointer to CMD_QUEUE+$40 ($8300)
     lda byte_f1
-    cmp #>WORK_RAM1 + $2d0
-    bcc loc_803b    // if < 5300, continue
-    bne loc_8042    // if > 5300, stop
+    cmp #>(CMD_QUEUE + $40)
+    bcc loc_803b
+    bne loc_8042
     lda byte_f0
-    cmp #<WORK_RAM1 + $2d0
-    bcc loc_803b    // if < 5300, continue
+    cmp #<(CMD_QUEUE + $40)
+    bcc loc_803b
+
 loc_8042:
-	
-	// store high byte first (53), then low byte (00)
-    lda #>WORK_RAM1 + $2d0
-    sta byte_dc      // $DC
-    sta byte_de      // $DE
-    lda #<WORK_RAM1 + $2d0
-    sta byte_dd      // $DD
-    sta byte_df      // $DF
+    // store low byte first, then high byte (6502 pointer order)
+    lda #<(CMD_QUEUE + $40)
+    sta byte_dc      // $DC low
+    sta byte_de      // $DE low
+    lda #>(CMD_QUEUE + $40)
+    sta byte_dd      // $DD high
+    sta byte_df      // $DF high
 
 	// clear word_5606+1  (i.e., $5607)
     lda #$00
@@ -177,7 +177,6 @@ loc_8042:
 	jsr sub_80c5
 	// Sets options to flip Screen
 	jsr sub_80b5  
-	
     lda byte_c3
     beq loc_8062          // if zero, skip
     // D8 = $52C0
@@ -192,7 +191,6 @@ loc_8042:
     // store $FFFF at $52C2
     sta CMD_QUEUE+2
     sta CMD_QUEUE+3
-	
 	
 /**************************
 * Set up IRQs on Arcade   *
@@ -284,11 +282,12 @@ loc_807c:
 	
     // Load X from $DA (pointer) into temp pointer byte_dc/dd
     lda byte_da        // low
-    sta byte_dc		
+    sta byte_7		
     lda byte_db        // high
-    sta byte_dd	
+    sta byte_8	
+
 	ldy #0
-    lda (byte_dc),y    // actually read the flag byte
+    lda (byte_7),y    // actually read the flag byte
     asl
     bcs loc_807c
     and #$7F
@@ -296,7 +295,7 @@ loc_807c:
 	
 	// get low byte
 	iny
-	lda (byte_dc),y    //  derived index into d56a
+	lda (byte_7),y    //  derived index into d56a
 	sta zp_cmd_param
 
 	
@@ -344,12 +343,19 @@ pointer_ok:
 store_da:
     // pointer already stored in byte_da/db
 	// X already = 0,2,4,6 from and #$7F / tax
+	
+	// fake return address for RTS -> loc_807c
+    lda #>(loc_807c-1)
+    pha
+    lda #<(loc_807c-1)
+    pha
 
-    lda d562,x              // low byte of handler address
-    sta byte_5
-    lda d562+1,x            // high byte
-    sta byte_6
-    jmp (byte_5)
+	lda d562,x              // low byte of handler address
+	sta byte_5
+	lda d562+1,x            // high byte
+	sta byte_6
+	jmp (byte_5)
+	
 
 /******************
 * Producer section*
@@ -948,6 +954,7 @@ pix_loop:
 
 	
 loc_8242: // from function table at D9F0, to do.
+	jmp *
 
 sub_841e:
     lda byte_ef
@@ -1178,7 +1185,7 @@ loc_86e9:
 	
 sub_86f6:
     lda WORK_RAM1+$1D6      // word_5206
-    lbne loc_8782
+    lbne loc_8782			  // draws the game playfield
     jsr loc_c6a6
     
 	LDU(e172)
@@ -1224,8 +1231,10 @@ loc_8710:
 
 	lda #0
 	sta B_Register
+	sta byte_f2          // low byte of D = B = 0
 
 	lda #3
+	sta byte_f3          // high byte of D = A = 3
 	jsr loc_80a2
 
 	lda #$0c
@@ -1325,9 +1334,9 @@ loc_8758:
 /*************************************************
 * Initialise energy bar                          * 
 *                                                *
-* Arcade writes attribute bytes for flipped bar  *
-* segments to for Player one                     *
-*************************************************/
+* Arcade writes attribute bytes only to flip the *
+* energy bar - Player one only                   *
+**************************************************/
 
 loc_8764:
 	LDX(SCREEN_BASE+(RRB_Tail_words*2*($180>>arcadeRowSize))+$180-1)
@@ -1336,18 +1345,177 @@ loc_8764:
 	ADDX(2)					 // start at 0x2b38
 loc_876a:
 	ldy #0                   // attribute byte on MEGA65
-	lda #$80
-	clc
-	adc #$08				 // preserve row mask 0x8
+	//lda #$80				 // attribute flip X
+	//clc
+	//adc #$08				 // preserve row mask 0x8
+	lda #$88				 // refer to above for explanation.
 	sta (X_L),y
 
 	ADDX(2)
 	dec B_Register
 	bne loc_876a
 
+/******************************
+* Prints player two score     *
+* When player 2 is active     *
+*******************************/
+
+loc_876f:
+	lda byte_e0
+	beq loc_877e // player 2 is not active.
+
+	lda #$0a
+	sta B_Register
+	jsr sub_80a1
+
+	jsr sub_88bf
+	jsr sub_8922
+	
+loc_877e:
+	inc WORK_RAM1+$1D6 // $5206
+	rts
+
+/******************************
+* Draws the playfield         *
+* From right to left          *
+*******************************/
 
 loc_8782:
 	jmp *
+	dec byte_ca
+	lbne locret_87ce
+
+	lda #1
+	sta byte_ca
+
+	dec byte_ff
+	lbeq loc_87b2
+
+	lda #$17
+	sta B_Register
+
+	// ldx $FD
+	lda byte_fd
+	sta X_L
+	lda byte_fe
+	sta X_H
+
+	// leax 2,x
+	ADDX(2)
+
+	// stx $FD
+	lda X_L
+	sta byte_fd
+	lda X_H
+	sta byte_fe
+
+	// ldu word_5200
+	lda WORK_RAM1+$1D0
+	sta U_L
+	lda WORK_RAM1+$1D1
+	sta U_H
+
+	// leau 1,u
+	ADDU(1)
+
+	// stu word_5200
+	lda U_L
+	sta WORK_RAM1+$1D0
+	lda U_H
+	sta WORK_RAM1+$1D1
+
+loc_879e:
+	// lda ,u
+	ldy #0
+	lda (U_L),y
+
+	// sta ,x
+	ldy #0
+	sta (X_L),y
+
+	// lda $2E0,u
+	clc
+	lda U_L
+	adc #<$02e0
+	sta byte_5
+	lda U_H
+	adc #>$02e0
+	sta byte_6
+	ldy #0
+	lda (byte_5),y
+
+	// sta -1,x
+	sec
+	lda X_L
+	sbc #1
+	sta byte_5
+	lda X_H
+	sbc #0
+	sta byte_6
+	ldy #0
+	sta (byte_5),y
+
+	// leax $40,x
+	ADDX($40)
+
+	// leau $20,u
+	ADDU($20)
+
+	dec B_Register
+	bne loc_879e
+	rts
+	
+loc_87b2:
+	lda #$20
+	sta byte_fd
+
+	inc byte_c6
+
+	lda #0
+	sta byte_c7
+
+	LDX(WORK_RAM2+$0D)	// original #$543D
+
+	// std ,x
+	LDD($328a)
+	STD_PTR(X_L)
+
+	// std 2,x
+	clc
+	lda X_L
+	adc #2
+	sta byte_5
+	lda X_H
+	adc #0
+	sta byte_6
+	LDD($3b8a)
+	STD_PTR(byte_5)
+
+	// std 4,x
+	clc
+	lda X_L
+	adc #4
+	sta byte_5
+	lda X_H
+	adc #0
+	sta byte_6
+	LDD($3898)
+	STD_PTR(byte_5)
+
+	// clr -1,x
+	sec
+	lda X_L
+	sbc #1
+	sta byte_5
+	lda X_H
+	sbc #0
+	sta byte_6
+	ldy #0
+	lda #0
+	sta (byte_5),y
+	
+locret_87ce:
+	rts
 	
 /*****************
 *Splash Screen   *
@@ -1570,7 +1738,14 @@ loc_8808: // seems to get called when you press start
 
 loc_8824:	// to do - gets called during demo.
 	jmp *
-
+	
+/*********************
+*Player 2 score setup*
+**********************/
+sub_88bf:
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($0f1>>arcadeRowSize))+$0f1-1)	// original $58F1
+	LDU(WORK_RAM1+$1E3)													// original $5213
+ 
 sub_88c5:
     ldy #0
     lda (U_L),y
@@ -1717,11 +1892,121 @@ loc_892a:
     rts
 	
 /*****************************
-// Player 1 and Player 2 lives*
-*****************************/
+* Player 1 and Player 2 lives*
+******************************/
 
-loc_892d: 
-	jmp *
+/**********************************************
+* Queue command handler
+*
+* Fills top-screen score/life fields with '0'
+* at fixed screen positions.
+*
+* 892C: return to dispatcher (loc_807c)
+* 892D: fill left-side field at $5903
+* 8942: optionally fill right-side field at $593D
+**********************************************/
+
+locret_892c:
+    rts
+
+
+loc_892d:
+	// ldd #$1009
+	lda #$10              // blank tile
+	sta A_Register
+	lda #$09              // count
+	sta B_Register
+	jsr loc_8967
+
+	lda WORK_RAM2+$30     // word_5460
+	sta B_Register
+	beq loc_8942
+
+	dec B_Register
+	beq loc_8942
+
+	lda B_Register
+	cmp #$0a
+	bcc loc_8940
+	lda #$0a
+	sta B_Register
+
+loc_8940:
+	jsr loc_8965
+
+loc_8942:
+	lda WORK_RAM1+$1B0    // word_51E0
+	beq locret_892c
+
+	// ldd #$1009
+	lda #$10              // blank tile
+	sta A_Register
+	lda #$09              // count
+	sta B_Register
+	jsr loc_8972
+
+	lda WORK_RAM2+$60     // word_5490
+	sta B_Register
+	beq locret_892c
+
+	dec B_Register
+	beq locret_892c
+
+	lda B_Register
+	cmp #$0a
+	bcc loc_895a
+	lda #$0a
+	sta B_Register
+
+loc_895a:
+	jmp loc_8970
+
+
+sub_895c:
+	lda WORK_RAM2+$00     // word_5430
+	sta B_Register
+	dec B_Register
+
+	lda WORK_RAM1+$1B1    // word_51E0+1
+	bne loc_8970
+
+loc_8965:
+	lda #$10              // blank tile, not ASCII '0'
+
+loc_8967:
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($103>>arcadeRowSize))+$103-1)   // original $5903
+
+loc_896a:
+	lda A_Register
+	ldy #0
+	sta (X_L),y           // write tile byte
+	ADDX(2)               // next visible cell
+	dec B_Register
+	bne loc_896a
+	rts
+
+
+loc_8970:
+	lda #$10              // blank tile
+
+loc_8972:
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($13d>>arcadeRowSize))+$13d-1)   // original $593D
+
+loc_8975:
+	ldy #0
+	sta (X_L),y           // write tile byte
+	sec
+	lda X_L
+	sbc #2                // previous visible cell
+	sta X_L
+	lda X_H
+	sbc #0
+	sta X_H
+
+	dec B_Register
+	bne loc_8975
+	rts
+
 
 	
 /******************************
@@ -1731,7 +2016,7 @@ loc_892d:
 loc_897d:
     // clear bit 2 of ByteC1
     lda byte_c1
-    and #$FB
+    and #$fb
     sta byte_c1
 
     // increment frame counter
@@ -1849,7 +2134,7 @@ loc_8a00:
     bne loc_8a25        // only trigger when E6 == 4
 
     lda byte_c1
-    and #$F7            // clear bit 3
+    and #$f7            // clear bit 3
     sta byte_c1
     jmp loc_8a20
 	
@@ -3059,9 +3344,9 @@ loc_8dda:
     BCS(loc_8dda)
     rts
 	
-/****************************
+/*****************************
 * DA70 - Jump Table Handler 1*
-*****************************/	
+******************************/	
 	
 loc_8de2:
 	lda byte_c6
@@ -3132,7 +3417,7 @@ locret_8e1d:
     rts
 
 /****************************
-* DA70 - Jump Table Handler 2*
+*DA70 - Jump Table Handler 2*
 *****************************/	
 
 loc_8e1e:
@@ -3204,7 +3489,7 @@ loc_8e60:
     jmp loc_a7db
 
 loc_8e66:
-    jsr sub_86f6			//  to do.
+    jsr sub_86f6
     lda #0
     sta WORK_RAM2+$09       // word_5439 low
     sta WORK_RAM2+$0A       // word_5439 high
@@ -3260,7 +3545,8 @@ locret_8e7c:
 * Game Play Loop *
 ******************/
 loc_8e7d:
-	LDX(WORK_RAM2)		// $5437
+	
+	LDX(WORK_RAM2 + $7)		// $5437
 	jsr sub_8e6f
 
 	ADDX(2)
@@ -3295,7 +3581,7 @@ loc_8ea2:  // to do - part of game play loop
 			//bsr.w	sub_9EA5					; draws energy bars.
 			// lots to do here.
 loc_8ef3:
-
+	jmp *
 
 loc_8ef5:
 	lda WORK_RAM1+$1D6      // word_5206 low
@@ -3477,7 +3763,7 @@ loc_919e:
 /* Waterfall code*/
 
 loc_9252:
-loc_926D:
+loc_926d:
 loc_9285:
 	rts
 
@@ -3674,7 +3960,7 @@ loc_a7f5:
     cmp #4
     bne loc_a81d
 
-    LDY(WORK_RAM1+$30)		// $50d0
+    LDY(WORK_RAM1+$A0)		// $50d0
     jsr sub_b566
 
     ADDY($40)
@@ -3685,7 +3971,7 @@ loc_a7f5:
 
 loc_a81d:
 	lda #6
-	sta WORK_RAM2+$DB      // word_550B+1
+	sta WORK_RAM2+$DC      // word_550C
 
 	jsr sub_c3e6
 	cmp #4
@@ -3984,5 +4270,3 @@ sub_c896:
 	bra	loc_c882
 
 */
-
-	
