@@ -1,6 +1,31 @@
 
 ## DevLog - Yie Ar Kung Fu Mega65 port
 
+### 25/03/2026
+
+## Attract playfield draw progress
+
+- Corrected `loc_8782` column start logic.
+- Fixed destination column sequencing using proper tile-byte arcade addresses:
+  - `PlayfieldColumnPtrs = ArcadeToMegaTextByte($59C1 + (i * 2))`
+- Confirmed playfield now draws in the correct screen position and shape.
+- Remaining issues are now limited to per-tile attribute decoding:
+  - tile MSB / page selection
+  - X/Y flip bits
+  - MEGA65 row mask merge
+- Geometry/pathing bug appears solved.
+
+<img width="586" height="504" alt="{9E16D210-6C8A-4D17-8A36-C6403967A348}" src="https://github.com/user-attachments/assets/aff29943-6916-42bf-bf81-36c5836e4399" />
+
+
+- ## Known Issues / To Do
+  
+- `KO` text is still a few pixels too far to the right.
+  - It should be directly under the `3` in `38`.
+  - Likely not a script-anchor issue anymore.
+  - More likely caused by fine horizontal placement via `gotoX_pos (lo)` or related RRB tail positioning.
+  - Need to verify whether a low-byte `gotoX` adjustment is introducing a small horizontal shift.
+
 ### 24/03/2026
 
 ### Porting Progress Notes
