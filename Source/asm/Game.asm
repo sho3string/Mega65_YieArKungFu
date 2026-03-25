@@ -1213,9 +1213,21 @@ loc_8710:
 	sta WORK_RAM1+$1D0
 	lda U_H
 	sta WORK_RAM1+$1D1
-
+	
+	lda #0
+    sta byte_colidx
+	
 	// ldx #$59BF
-	LDX(SCREEN_BASE+(RRB_Tail_words*2*($1bf>>arcadeRowSize))+$1bf-1)	// $59bf
+	//LDX(SCREEN_BASE+(RRB_Tail_words*2*($1bf>>arcadeRowSize))+$1bf-1)	// $59bf
+	
+	// Set the beginning of playfield.
+	// far right, then set to far left in loc_8782
+	lda #<$59bf
+    sta byte_fd_arc
+    lda #>$59bf
+    sta byte_fe_arc
+	
+	jsr TranslateArcadeTextPtrToMega
 
 	// stx $FD
 	lda X_L
@@ -1246,7 +1258,7 @@ loc_8710:
 	jsr sub_80a1
 
 	// ldx #$597F
-	LDX(SCREEN_BASE+(RRB_Tail_words*2*($17f>>arcadeRowSize))+$17f-1)	// $597f
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($17f>>arcadeRowSize))+$17f-1)	// $597f - Enemy Name
 
 	// ldu #$D503   ; table of word pointers
 	LDU(d503)
@@ -1327,7 +1339,7 @@ loc_874c:
 *******************************/
 loc_8758:
 	LDU(WORK_RAM1+$1EC)													 // original $521C
-	LDX(SCREEN_BASE+(RRB_Tail_words*2*($0db>>arcadeRowSize))+$0db-1)    // original $58DB
+	LDX(SCREEN_BASE+(RRB_Tail_words*2*($0db>>arcadeRowSize))+$0db-1)   // original $58DB
 	jsr sub_88c5
 	jsr sub_8922
 
@@ -1381,7 +1393,6 @@ loc_877e:
 *******************************/
 
 loc_8782:
-	jmp *
 	dec byte_ca
 	lbne locret_87ce
 
@@ -1393,30 +1404,31 @@ loc_8782:
 
 	lda #$17
 	sta B_Register
+	
+	lda byte_colidx
+	asl
+	tax
 
-	// ldx $FD
-	lda byte_fd
+	lda PlayfieldColumnPtrs,x
 	sta X_L
-	lda byte_fe
+	lda PlayfieldColumnPtrs+1,x
 	sta X_H
 
-	// leax 2,x
-	ADDX(2)
-
-	// stx $FD
 	lda X_L
 	sta byte_fd
 	lda X_H
 	sta byte_fe
-
+	
+	inc byte_colidx
+	
 	// ldu word_5200
-	lda WORK_RAM1+$1D0
+	lda WORK_RAM1+$1D0 // 65
 	sta U_L
-	lda WORK_RAM1+$1D1
+	lda WORK_RAM1+$1D1 // 78
 	sta U_H
 
 	// leau 1,u
-	ADDU(1)
+	ADDU(1)				// 7866
 
 	// stu word_5200
 	lda U_L
@@ -1425,45 +1437,49 @@ loc_8782:
 	sta WORK_RAM1+$1D1
 
 loc_879e:
-	// lda ,u
-	ldy #0
-	lda (U_L),y
+    // lda ,u  -> tile
+    ldy #0
+    lda (U_L),y
 
-	// sta ,x
-	ldy #0
-	sta (X_L),y
+    // sta ,x  -> tile byte
+    ldy #0
+    sta (X_L),y
+	
+    // lda $2E0,u -> arcade attribute table
+    clc
+    lda U_L
+    adc #<$02e0
+    sta byte_5
+    lda U_H
+    adc #>$02e0
+    sta byte_6
+    ldy #0
+    lda (byte_5),y
 
-	// lda $2E0,u
-	clc
-	lda U_L
-	adc #<$02e0
-	sta byte_5
-	lda U_H
-	adc #>$02e0
-	sta byte_6
-	ldy #0
-	lda (byte_5),y
+	lda #$08    // MEGA65 row mask
 
-	// sta -1,x
-	sec
-	lda X_L
-	sbc #1
-	sta byte_5
-	lda X_H
-	sbc #0
-	sta byte_6
-	ldy #0
-	sta (byte_5),y
+    // store attribute in second byte of current cell - TODO!
+    pha
+    clc
+    lda X_L
+    adc #1
+    sta byte_5
+    lda X_H
+    adc #0
+    sta byte_6
+    pla
+    ldy #0
+    sta (byte_5),y
 
-	// leax $40,x
-	ADDX($40)
+    // next destination row
+    ADDX(ROW_STRIDE)
 
-	// leau $20,u
-	ADDU($20)
+    // next source row
+    ADDU($20)
 
-	dec B_Register
-	bne loc_879e
-	rts
+    dec B_Register
+    bne loc_879e
+    rts
 	
 loc_87b2:
 	lda #$20
