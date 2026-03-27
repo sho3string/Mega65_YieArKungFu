@@ -1260,7 +1260,7 @@ loc_8710:
 	// ldx #$597F
 	LDX(SCREEN_BASE+(RRB_Tail_words*2*($17f>>arcadeRowSize))+$17f-1)	// $597f - Enemy Name
 
-	// ldu #$D503   ; table of word pointers
+	// ldu #$D503   // table of word pointers
 	LDU(d503)
 
 	// ldb word_5430+1
@@ -1273,12 +1273,12 @@ loc_8710:
 	sta B_Register
 
 loc_873f_prep:
-	// aslb  ; word table => *2
+	// aslb  // word table => *2
 	lda B_Register
 	asl
 	sta B_Register
 
-	// ldu b,u  ; load word pointer from table at U + B
+	// ldu b,u  // load word pointer from table at U + B
 	clc
 	lda U_L
 	adc B_Register
@@ -1295,7 +1295,7 @@ loc_873f_prep:
 	sta U_H
 
 loc_8742:
-	// lda ,-u   ; predecrement U, then read
+	// lda ,-u   // predecrement U, then read
 	sec
 	lda U_L
 	sbc #1
@@ -1392,146 +1392,207 @@ loc_877e:
 * From right to left          *
 *******************************/
 
+
 loc_8782:
-	dec byte_ca
-	lbne locret_87ce
+	// move this out of scope of the loop since they never change.
+	lda #$F8
+	sta COLPTR2
+	lda #$0F
+	sta COLPTR3
 
-	lda #1
-	sta byte_ca
+    dec byte_ca
+    lbne locret_87ce
 
-	dec byte_ff
-	lbeq loc_87b2
+    lda #1
+    sta byte_ca
 
-	lda #$17
-	sta B_Register
-	
-	lda byte_colidx
-	asl
-	tax
+    dec byte_ff
+    lbeq loc_87b2
 
-	lda PlayfieldColumnPtrs,x
-	sta X_L
-	lda PlayfieldColumnPtrs+1,x
-	sta X_H
+    lda #$17
+    sta B_Register
 
-	lda X_L
-	sta byte_fd
-	lda X_H
-	sta byte_fe
-	
-	inc byte_colidx
-	
-	// ldu word_5200
-	lda WORK_RAM1+$1D0 // 65
-	sta U_L
-	lda WORK_RAM1+$1D1 // 78
-	sta U_H
+    //----------------------------------------
+    // Load translated screen column pointer
+    //----------------------------------------
+    lda byte_colidx
+    asl
+    tax
 
-	// leau 1,u
-	ADDU(1)				// 7866
+    lda PlayfieldColumnPtrs,x
+    sta X_L
+    lda PlayfieldColumnPtrs+1,x
+    sta X_H
 
-	// stu word_5200
-	lda U_L
-	sta WORK_RAM1+$1D0
-	lda U_H
-	sta WORK_RAM1+$1D1
+    lda X_L
+    sta byte_fd
+    lda X_H
+    sta byte_fe
+
+    inc byte_colidx
+
+    //----------------------------------------
+    // Load source pointer from word_5200
+    //----------------------------------------
+    lda WORK_RAM1+$1D0
+    sta U_L
+    lda WORK_RAM1+$1D1
+    sta U_H
+
+    // leau 1,u
+    ADDU(1)
+
+    // stu word_5200
+    lda U_L
+    sta WORK_RAM1+$1D0
+    lda U_H
+    sta WORK_RAM1+$1D1
+
 
 loc_879e:
-    // lda ,u  -> tile
-    ldy #0
-    lda (U_L),y
+	// lda ,u  -> tile
+	ldy #0
+	lda (U_L),y
 
-    // sta ,x  -> tile byte
-    ldy #0
-    sta (X_L),y
-	
-    // lda $2E0,u -> arcade attribute table
-    clc
-    lda U_L
-    adc #<$02e0
-    sta byte_5
-    lda U_H
-    adc #>$02e0
-    sta byte_6
-    ldy #0
-    lda (byte_5),y
+	// sta ,x  -> tile byte
+	ldy #0
+	sta (X_L),y
 
-	lda #$08    // MEGA65 row mask
+	// lda $2E0,u -> arcade attribute table
+	clc
+	lda U_L
+	adc #<$02e0
+	sta byte_5
+	lda U_H
+	adc #>$02e0
+	sta byte_6
+	ldy #0
+	lda (byte_5),y
+	sta tmp // save source attribute byte
 
-    // store attribute in second byte of current cell - TODO!
-    pha
+	// screen attr page bit comes from source attr bit 4 on this table
+	// (flip bits are 6=Y, 7=X on real hardware)
+	and #$10
+	lsr
+	lsr
+	lsr
+	lsr
+	pha  // save tile MSB as bit 0/1
+
+	// set colour ram offset
+	sec
+	lda X_L
+	sbc #<SCREEN_BASE
+	sta COLPTR0
+
+	lda X_H
+	sbc #>SCREEN_BASE
+	sta COLPTR1
+
+	// Colour RAM byte 0
+	/*
+	MAME source comment is incorrect regarding Flip X/Y bits.
+	------------------------------------------------
+	5000-502f    W  sprite RAM 1 (18 sprites)
+						byte 0 - bit 0 - sprite code MSB
+								 bit 6 - flip X
+								 bit 7 - flip Y
+						byte 1 - Y position
+	------------------------------------------------
+	Actual hardware:
+	bit 6 = Flip Y
+	bit 7 = Flip X
+	*/
+
+	lda tmp
+	and #$40        // arcade flip Y
+	asl             // move bit 6 -> bit 7
+	sta tmp2
+
+	lda tmp
+	and #$80        // arcade flip X
+	lsr             // move bit 7 -> bit 6
+	ora tmp2
+
+	ldz #0
+	sta ((COLPTR0)),z
+
+	pla
+	ora #$08        // row mask
+
+	pha
+	clc
+	lda X_L
+	adc #1
+	sta byte_5
+	lda X_H
+	adc #0
+	sta byte_6
+	pla
+	ldy #0
+	sta (byte_5),y
+
+	// next destination row
+	ADDX(ROW_STRIDE)
+
+	// next source row
+	ADDU($20)
+
+	dec B_Register
+	lbne loc_879e
+	rts
+
+
+loc_87b2:
+    lda #$20
+    sta byte_fd
+    inc byte_c6
+
+    lda #0
+    sta byte_c7
+
+    LDX(WORK_RAM2+$0D)      // original #$543D
+
+    // std ,x
+    LDD($328a)
+    STD_PTR(X_L)
+
+    // std 2,x
     clc
     lda X_L
-    adc #1
+    adc #2
     sta byte_5
     lda X_H
     adc #0
     sta byte_6
-    pla
+    LDD($3b8a)
+    STD_PTR(byte_5)
+
+    // std 4,x
+    clc
+    lda X_L
+    adc #4
+    sta byte_5
+    lda X_H
+    adc #0
+    sta byte_6
+    LDD($3898)
+    STD_PTR(byte_5)
+
+    // clr -1,x
+    sec
+    lda X_L
+    sbc #1
+    sta byte_5
+    lda X_H
+    sbc #0
+    sta byte_6
     ldy #0
+    lda #0
     sta (byte_5),y
 
-    // next destination row
-    ADDX(ROW_STRIDE)
-
-    // next source row
-    ADDU($20)
-
-    dec B_Register
-    bne loc_879e
-    rts
-	
-loc_87b2:
-	lda #$20
-	sta byte_fd
-
-	inc byte_c6
-
-	lda #0
-	sta byte_c7
-
-	LDX(WORK_RAM2+$0D)	// original #$543D
-
-	// std ,x
-	LDD($328a)
-	STD_PTR(X_L)
-
-	// std 2,x
-	clc
-	lda X_L
-	adc #2
-	sta byte_5
-	lda X_H
-	adc #0
-	sta byte_6
-	LDD($3b8a)
-	STD_PTR(byte_5)
-
-	// std 4,x
-	clc
-	lda X_L
-	adc #4
-	sta byte_5
-	lda X_H
-	adc #0
-	sta byte_6
-	LDD($3898)
-	STD_PTR(byte_5)
-
-	// clr -1,x
-	sec
-	lda X_L
-	sbc #1
-	sta byte_5
-	lda X_H
-	sbc #0
-	sta byte_6
-	ldy #0
-	lda #0
-	sta (byte_5),y
-	
 locret_87ce:
-	rts
+    rts
 	
 /*****************
 *Splash Screen   *
@@ -2552,7 +2613,7 @@ loc_8b3c:
     cpx #$27	// workaround - applied for the last sprite offset in the title
     bcs loc_8b60
 
-    // save Y (DO NOT use tmp; ASRA uses tmp)
+    // save Y (DO NOT use tmp// ASRA uses tmp)
     sta byte_fc
 
     // ASRA(byte_c1) -> Flags bit0
@@ -3537,7 +3598,7 @@ sub_8e6f:
 	lda B_Register
 	sta (X_L),y
 
-	// bne locret_8e7c   ; test 16-bit result
+	// bne locret_8e7c   // test 16-bit result
 	lda A_Register
 	ora B_Register
 	bne locret_8e7c
@@ -3590,11 +3651,11 @@ loc_8e92:
 	sta FB_L       // $F7
 	
 loc_8ea2:  // to do - part of game play loop
-			//bsr.w	DO_WATERFALL				; check status for waterfall - 0x923F
-			//bsr.w	sub_9084					; 1UP flasher 0x8b=blank, B=1UP
-			//bsr.w	sub_9315					; game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
-			//bsr.w	sub_A86D					; sprite enable for enemy ?
-			//bsr.w	sub_9EA5					; draws energy bars.
+			//bsr.w	DO_WATERFALL				// check status for waterfall - 0x923F
+			//bsr.w	sub_9084					// 1UP flasher 0x8b=blank, B=1UP
+			//bsr.w	sub_9315					// game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
+			//bsr.w	sub_A86D					// sprite enable for enemy ?
+			//bsr.w	sub_9EA5					// draws energy bars.
 			// lots to do here.
 loc_8ef3:
 	jmp *
@@ -3703,7 +3764,7 @@ loc_8fd7:
     sbc #$00
     sta A_Register
 
-    bcs loc_8fe7            // 6809 BCC after SUBD => no borrow; 6502 C=1 means no borrow
+    bcs loc_8fe7            // 6809 BCC after SUBD => no borrow// 6502 C=1 means no borrow
 
     lda #0
     sta A_Register
