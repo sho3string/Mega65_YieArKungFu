@@ -134,17 +134,17 @@
 .const Q_ROW		= byte_40
 .const Q_TMP		= byte_41   // general scratch (was Q_YME in old code)
 .const Q_CARRY 	= byte_42   // carry temp for tile hi add
-.const Q_YSUB5		= byte_43   // MUST be a safe scratch not used elsewhere
+.const Q_YSUB5	= byte_43   // MUST be a safe scratch not used elsewhere
 .const Q_YSUB		= byte_44 
 .const XHI_TEMP	= byte_45
-.const COLPTR0 	= byte_46
-.const COLPTR1 	= byte_47
-.const COLPTR2 	= byte_48
-.const COLPTR3 	= byte_49
-.const SORT_I		= byte_4a   // choose free zp
-.const KEY_X		= byte_4b
-.const Q_XHI		= byte_4c
-.const Q_BOT      	= byte_4d
+.const SORT_I		= byte_46   // choose free zp
+.const KEY_X		= byte_47
+.const Q_XHI		= byte_48
+.const Q_BOT      	= byte_49
+.const COLPTR0	= byte_5a
+.const COLPTR1	= byte_5b
+.const COLPTR2	= byte_5c
+.const COLPTR3	= byte_5d
 
 .const FCM_YOFFS_DIR		= $10	// bit4 in raster-hi
 .const SPR_TILE_STRIDE	= 16	// 16 tiles across
@@ -362,34 +362,32 @@ RRB_BuildRow:
     // ---------------------------------------------
     lda #0
     sta RowCount
+	sta RRB_NeededThisRow
    
-    // ---------------------------------------------
-    // single pass: build compact RowOrder[]
-    // ---------------------------------------------
-    ldx #0
-!scanAll:
-    cpx PixieCount
-    beq !scanDone+
+	ldy CurrentRow
+	lda RowHead,y
+	cmp #$ff
+	beq !noPixies+
+	tax                    // X = first pixie in this row
 
+!walk:
     lda PixieActive,x
-    beq !nextPixie+
+    beq !next+         // (optional safety, can remove later)
 
-    lda PixieRow,x
-    cmp CurrentRow
-    bne !nextPixie+
-
-    // match: store pixie index in RowOrder[RowCount]
     ldy RowCount
     txa
-    sta RowOrder,y
+    sta RowOrder,y     // keep your existing pipeline intact
 
     inc RowCount
     inc RRB_NeededThisRow
 
-!nextPixie:
-    inx
-    bne !scanAll-
-!scanDone:
+!next:
+    lda PixieNext,x
+    tax
+    cmp #$ff
+    bne !walk-
+
+!noPixies:
 
     // ---------------------------------------------
     // clamp RowCount to RRB_PixiesPerRow (37)
@@ -769,6 +767,17 @@ BuildPixieListFromSpriteQueue:
     sta PixieCount
     sta P_IDX
     sta Q_IDX
+	
+// ---------------------------------------------
+// init per-row linked list heads (empty = $FF)
+// ---------------------------------------------
+    lda #$ff
+    ldx #0
+!:
+    sta RowHead,x
+    inx
+    cpx #CHARS_HIGH
+    bne !-
 
 !loop:
     lda Q_IDX
@@ -1034,6 +1043,13 @@ Emit_TL_R_top:
 	lda Q_TOP                    // TopMask[sub]
 	sta PixieMask,x
 	jsr StoreTile_TL
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1064,6 +1080,13 @@ Emit_TR_R_top:
 	lda Q_TOP                   // TopMask[sub]
 	sta PixieMask,x
 	jsr StoreTile_TR
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1087,8 +1110,14 @@ Emit_TL_R1_bot:
 	sta PixieXHi,x
 	lda Q_BOT
 	sta PixieMask,x
-
 	jsr StoreTile_BL
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1120,8 +1149,14 @@ Emit_TR_R1_bot:
 
 	lda Q_BOT
 	sta PixieMask,x
-
 	jsr StoreTile_BR
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1149,8 +1184,14 @@ Emit_BL_R1_top:
 
 	lda Q_TOP                // TopMask[sub]
 	sta PixieMask,x
-
 	jsr StoreTile_BL
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1182,8 +1223,14 @@ Emit_BR_R1_top:
 
 	lda Q_TOP
 	sta PixieMask,x
-
 	jsr StoreTile_BR
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
 	inc P_IDX
 	inc PixieCount
 	rts
@@ -1210,8 +1257,14 @@ Emit_BL_R2_bot:
 
     lda Q_BOT
     sta PixieMask,x
-
     jsr StoreTile_B1   // <-- NOT BL
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
     inc P_IDX
     inc PixieCount
     rts
@@ -1243,15 +1296,21 @@ Emit_BR_R2_bot:
 
     lda Q_BOT
     sta PixieMask,x
-
     jsr StoreTile_B2   // <-- NOT BR
+	
+	ldy PixieRow,x
+	lda RowHead,y
+	sta PixieNext,x
+	txa
+	sta RowHead,y
+	
     inc P_IDX
     inc PixieCount
     rts
 
 RRB_FramePhase:		.byte 0    // 0 or 1
 RRB_NeededThisRow:	.byte 0    // temp for current row
-RowCount:			.byte 0
+RowCount:				.byte 0
 PixieCount:			.byte 0
 PixieActive:			.fill PIXIE_MAX, 0   // 1=active
 PixieRow:				.fill PIXIE_MAX, 0   // coarse row 0..31
