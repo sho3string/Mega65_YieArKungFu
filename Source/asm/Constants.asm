@@ -22,11 +22,11 @@ byte 1 - character code LSB
 */
 
 // - work ram 0x5000 - 0x57ff
-.const SPRITE_RAM1		= $8000
-.const WORK_RAM1			= $8030
-.const CMD_QUEUE			= $82C0
-.const SPRITE_RAM2		= $8400
-.const WORK_RAM2			= $8430
+.const SPRITE_RAM1		= $9000
+.const WORK_RAM1			= $9030
+.const CMD_QUEUE			= $92C0
+.const SPRITE_RAM2		= $9400
+.const WORK_RAM2			= $9430
 .const SCREEN_BASE		= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
 .const ARCADE_VRAM_BASE	= $5800  /* Arcade character ram */
 .const SCREEN_WIDTH 		= 256	 /* arcade is 256 - 32 characters visible */
@@ -67,3 +67,7 @@ byte 1 - character code LSB
 .const Flags				= $fa
 .const tmp					= $fb
 .const tmp2				= $fc
+
+// labels
+
+.label WATERFALL_TILE = (SCREEN_BASE+(RRB_Tail_words*2*($311>>arcadeRowSize))+$311-1)
