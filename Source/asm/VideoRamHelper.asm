@@ -6,31 +6,26 @@
 .const byte_dst_hi = $d5
 .const byte_colidx = $d6
 
-// Per-row hidden prefix bytes before visible text starts.
-// 0 for normal rows, 32 for rows with pixie/RRB header in front.
-.var RowPrefixBytesList = List().add(
-    $00,$00,$00,$00,$00,$00,$10,$00,
-    $00,$00,$00,$00,$00,$00,$00,$00,
-    $00,$00,$00,$00,$00,$00,$00,$00,
-    $00,$00,$00,$00,$00,$00,$00,$00
-)
+
 
 RowPrefixBytes:
-    .byte $00,$00,$00,$00,$00,$00,$10,$00
-    .byte $00,$00,$00,$00,$00,$00,$00,$00
-    .byte $00,$00,$00,$00,$00,$00,$00,$00
-    .byte $00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$10,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
+	.byte $00,$00,$00,$00,$00,$00,$00,$00
 	
+
 
 .function ArcadeToMegaTextByte(addr) {
     .var off   = addr - ARCADE_VRAM_BASE
     .var row   = off >> 6
     .var col   = off & $3f
     .var cell  = col >> 1
-    .var lane  = col & 1    // 0=arcade attr, 1=arcade tile
-    .var base  = SCREEN_BASE + (row * ROW_STRIDE) + RowPrefixBytesList.get(row) + (cell * 2)
+    .var lane  = col & 1
+    .var base  = SCREEN_BASE + (row * ROW_STRIDE) + (cell * 2)
     .return base + (lane == 1 ? 0 : 1)
 }
+
 
 /************************************************
 * Attract playfield column start pointers
@@ -45,6 +40,8 @@ PlayfieldColumnPtrs:
 .for (var i = 0; i < $21; i++) {
     .word ArcadeToMegaTextByte($59c1 + (i * 2))
 }
+
+
 
 /************************************************
 * TranslateArcadeTextPtrToMega
