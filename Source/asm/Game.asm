@@ -3717,12 +3717,14 @@ loc_8e92:
 	sta FB_L       // $F7
 	
 loc_8ea2:  // to do - part of game play loop
-			//bsr.w	DO_WATERFALL				// check status for waterfall - 0x923F
-			//bsr.w	sub_9084					// 1UP flasher 0x8b=blank, B=1UP
-			//bsr.w	sub_9315					// game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
-			//bsr.w	sub_A86D					// sprite enable for enemy ?
-			//bsr.w	sub_9EA5					// draws energy bars.
-			// lots to do here.
+		
+	//bsr.w	sub_A86D					// sprite enable for enemy ?
+	//bsr.w	sub_9EA5					// draws energy bars.
+	// lots to do here.
+	
+	jsr sub_923f		// check status for waterfall
+	jsr sub_9084		// 1UP flasher 0x8b=blank, B=1UP
+	jsr sub_9315		// game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
 loc_8ef3:
 	jmp *
 
@@ -3870,6 +3872,82 @@ loc_901b: // to do
 loc_902b: // to do
 loc_9052: // to do
 loc_9076: // to do
+	jmp *
+
+// ------------------------------------------------------------
+// sub_9084
+// 1UP flasher
+//
+// 0x0B = "1UP"
+// 0x8B = blanked version
+// ------------------------------------------------------------
+
+sub_9084:
+	// dec $FD
+	dec byte_fd
+	bne loc_9090
+
+	// lda #$20
+	lda #$20
+	sta byte_fd
+
+	// ldb #$0B
+	lda #$0b
+	sta B_Register
+
+	// bra loc_9098
+	bra loc_9098
+
+
+loc_9090:
+	// lda $FD
+	lda byte_fd
+
+	// cmpa #$10
+	cmp #$10
+	bne locret_90ac
+
+	// ldb #$8B
+	lda #$8b
+	sta B_Register
+
+
+loc_9098:
+	// pshs b
+	pha
+	lda B_Register
+	pha
+
+	// lda $E1
+	lda byte_e1
+	beq loc_909f
+
+	// decb
+	dec B_Register
+
+loc_909f:
+	// jsr sub_80A1
+	jsr sub_80a1
+
+	// puls b
+	pla
+	sta B_Register
+	pla
+
+	// eorb #$82
+	lda B_Register
+	eor #$82
+	sta B_Register
+
+	// lda $E2
+	lda byte_e2
+
+	// lbeq sub_80A1
+	bne locret_90ac
+	jsr sub_80a1
+
+locret_90ac:
+	rts
 
 loc_90ad:
     lda #5
@@ -3903,13 +3981,124 @@ loc_90ce:
 loc_919e:
 	jmp *
 
-/* Waterfall code*/
+/*****************************
+* Waterfall dispatcher code  *
+*****************************/
 
-loc_9252:
-loc_926d:
-loc_9285:
+locret_923e:
 	rts
 
+loc_926d:
+	jmp *
+loc_9285:
+	jmp *
+
+
+sub_923f:
+	// ldb word_5430+1
+	lda WORK_RAM2 + $01        // $5431	
+	sta B_Register			 // 0x02
+
+	// cmpb #4 / bhi locret_923e
+	cmp #$05
+	bcs locret_923e           // if B >= 5, then B > 4
+
+	// ldu #$5190
+	lda #<WORK_RAM1+$160
+	sta U_L
+	lda #>WORK_RAM1+$160
+	sta U_H
+
+	// ldx #$DABA
+	LDX(daba)
+
+	// lda word_543B+1
+	lda WORK_RAM2 + $0C
+
+	// asla
+	asl                        // word index * 2
+	tay
+
+	// jmp [a,x]
+	lda (X_L),y
+	sta byte_5
+	iny
+	lda (X_L),y
+	sta byte_6
+	jmp (byte_5)
+
+
+loc_9252:
+	// lda word_5B11
+	lda WATERFALL_TILE
+
+	// cmpa #$77 / bne loc_925d_set77
+	cmp #$77
+	bne loc_925d_set77
+
+	// ldb #$3E
+	lda #$3e
+	sta B_Register
+	bne loc_925d_store      // always branches
+
+loc_925d_set77:
+	// ldb #$77
+	lda #$77
+	sta B_Register
+
+loc_925d_store:
+	// stb word_5B11
+	lda B_Register
+	sta WATERFALL_TILE
+
+	// lda #$E4
+	lda #$e4
+	ldy #$0e
+	sta (U_L),y
+
+	// ldd word_543D
+	lda WORK_RAM2 + $0d     // $543D
+	sta A_Register
+	lda WORK_RAM2 + $0e     // $543E
+	sta B_Register
+
+	// sta 4,u
+	lda A_Register
+	ldy #$04
+	sta (U_L),y
+
+	// stb 6,u
+	lda B_Register
+	ldy #$06
+	sta (U_L),y
+
+	// bra loc_929B
+	jmp loc_929b
+
+loc_929b:
+	// lda #$40
+	lda #$40
+
+	// sta $0F,u
+	ldy #$0f
+	sta (U_L),y
+
+	// inc word_543B+1
+	inc WORK_RAM2 + $0c        // $543C
+
+	// lda word_543B+1
+	lda WORK_RAM2 + $0c
+
+	// cmpa #3 / bcs locret_92ac
+	cmp #$03
+	bcc locret_92ac
+
+	// clr word_543B+1
+	lda #$00
+	sta WORK_RAM2 + $0c
+
+locret_92ac:
+	rts
 
 sub_92ad:
     // if F1 != $18 → return
@@ -4021,8 +4210,836 @@ x_lo_ok:
 locret_92ec:
     rts
 	
-sub_a663:
+
+sub_92ed:
+	// lda #$10
+	lda #$10				// #16 for what ?
+
+	// suba word_5430+1
+	sec
+	sbc WORK_RAM2 + $01	// 0x10 - 0x2 ( player id ) = 0xE
+
+	// cmpa #8
+	cmp #$08				// 0x2 ( nuncha ) != 0x8 ( sword )
+	bne loc_92f7			// not sword ?
+
+	// inca
+	clc
+	adc #$01				// 0x8 becomes 0x9  when enemy id = 8.
+
+loc_92f7:
+	// sta word_51A7
+	sta WORK_RAM1 + $177	// nuncha id , this is read at 97C5, seems to be read when an attack is made by player 
+	rts
+	
+loc_92fb: // to do, part of sub_9315
 	jmp *
+	
+loc_92fe: // to do, part of sub_9315
+	jmp *
+
+// ------------------------------------------------------------
+// sub_9315
+// game vars and set up
+// inits sprite positions in the game/attract. ( 9315 -> 9415 )
+// ------------------------------------------------------------
+
+sub_9315:
+	// jsr sub_A270
+	jsr sub_a270				// FEEDLE & non FEEDLE
+
+	// jsr sub_92ED
+	jsr sub_92ed				// has player jumped, 0-landed, 1-jump, 2-diagonal jump
+
+	// lda WORK_RAM2 + $94
+	lda WORK_RAM2 + $94
+	bne loc_932d				// handle jump.
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	// lda word_5435
+	lda WORK_RAM2 + $05		// is player still alive ? ( e8 = dead )
+	bne loc_92fb				// player died, set timer to 0xe8 and count to 0
+
+	// lda word_5435+1
+	lda WORK_RAM2 + $06		// is enemy still alive ? 
+	bne loc_92fe				// enemy died.
+
+loc_932d:
+	// lda WORK_RAM2 + $92
+	lda WORK_RAM2 + $92
+	sta WORK_RAM2 + $96
+
+	// ldb WORK_RAM2 + $94
+	lda WORK_RAM2 + $94
+	sta B_Register
+	cmp #$02
+	beq loc_9386
+
+	// ldb word_5430+1
+	lda WORK_RAM2 + $01		// enemy name id
+	sta B_Register
+	cmp ea1c+1 				// is the enemy FEEDLE ?
+	bne loc_936c				// non feedle enemy
+
+	// FEEDLE
+	lda WORK_RAM2 + $94		// 0-landed, 1-jump, 2-diagonal jump	
+	sta B_Register
+	bne loc_9367				// player has jumped
+
+	// jsr sub_9BBC
+	jsr sub_9bbc				// player hasn't jumped.
+
+	// cmpa #0
+	cmp #$00
+	beq loc_9386
+
+	// cmpa #3
+	cmp #$03
+	bcs loc_9352
+	jmp loc_9386
+
+loc_9352:
+	// ldb WORK_RAM2 + $92+1
+	lda WORK_RAM2 + $93
+	sta B_Register
+	beq loc_935c
+
+	// deca
+	dec
+	beq loc_9383
+	bne loc_9360
+
+loc_935c:
+	// cmpa #2
+	cmp #$02
+	beq loc_9383
+
+loc_9360:
+	// lda #1
+	lda #$01
+	sta WORK_RAM2 + $93
+	bne loc_9386
+
+loc_9367:
+	// clr WORK_RAM2 + $92+1
+	lda #$00
+	sta WORK_RAM2 + $93
+	bne loc_9386
+
+loc_936c:
+	// clr WORK_RAM2 + $92+1
+	lda #$00
+	sta WORK_RAM2 + $93
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	// ldb 4,u
+	ldy #$04
+	lda (U_L),y
+	sta B_Register
+
+	// cmpb $44,u
+	ldy #$44
+	cmp (U_L),y
+	bcc loc_9386
+
+	// ldb WORK_RAM2 + $94
+	lda WORK_RAM2 + $94
+	sta B_Register
+	bne loc_9386
+
+	// inc WORK_RAM2 + $92+1
+	inc WORK_RAM2 + $93
+	bne loc_9386
+
+loc_9383:
+	// clr WORK_RAM2 + $92+1
+	lda #$00
+	sta WORK_RAM2 + $93
+
+loc_9386:
+	// jsr sub_9BFA
+	jsr sub_9bfa
+
+	// lda WORK_RAM2 + $90
+	lda WORK_RAM2 + $90
+	lbeq loc_9415
+
+	// deca
+	dec
+	lbne loc_9458
+	rts
+
+
+// ------------------------------------------------------------
+// sub_9395
+// ------------------------------------------------------------
+
+sub_9395:
+	// sta word_54CC+1
+	sta WORK_RAM2 + $9d
+	lbeq loc_93ff
+
+	// ldx #$E758
+	LDX(e758)
+
+	// ldb word_5430+1
+	lda WORK_RAM2 + $01
+	sta B_Register
+
+	// andb #3
+	and #$03
+	sta B_Register
+
+	// aslb
+	asl
+	sta B_Register
+
+	// clra
+	lda #$00
+
+	// ldx d,x
+	clc
+	adc X_L
+	sta byte_5
+	lda X_H
+	adc B_Register
+	sta byte_6
+	ldy #$00
+	lda (byte_5),y
+	sta X_L
+	iny
+	lda (byte_5),y
+	sta X_H
+
+	// lda word_5030
+	lda WORK_RAM1 + $00
+	asl
+
+	// leax a,x
+	clc
+	adc X_L
+	sta X_L
+	bcc !+
+	inc X_H
+	!:
+
+	// lda ,x+
+	ldy #$00
+	lda (X_L),y
+	inc X_L
+	bne !+
+	inc X_H
+	!:
+
+	beq loc_93c9
+	cmp #$ff
+	beq loc_93ff
+
+	// preserve original A from ,x+
+	sta A_Register
+
+	// ldb word_54C2+1
+	lda WORK_RAM2 + $93
+	sta B_Register
+	beq loc_93c9
+
+	// tfr a,b
+	lda A_Register
+	sta B_Register
+
+	// andb #$FC
+	lda B_Register
+	and #$fc
+	sta B_Register
+	sta WORK_RAM1 + $1c2
+
+	// anda #3
+	lda A_Register
+	and #$03
+	beq loc_93c6
+
+	// eora #3
+	eor #$03
+	
+
+loc_93c6:
+	ora WORK_RAM1 + $1c2
+
+loc_93c9:
+	sta WORK_RAM1 + $1c2
+	sta WORK_RAM1 + $1c7
+
+	cmp #$10
+	bcc loc_93dd
+
+	// lda  WORK_RAM1 + $00+1
+	lda WORK_RAM1 + $01
+	bne loc_93dd
+
+	// lda WORK_RAM1 + $1c7
+	lda WORK_RAM1 + $1c7
+	ldy #$fd                 // -3,u
+	sta (U_L),y
+
+loc_93dd:
+	// lda ,x
+	ldy #$00
+	lda (X_L),y
+
+	cmp #$ff
+	beq loc_93ff
+
+	cmp WORK_RAM1 + $01
+	bcc loc_93f7
+
+	inc WORK_RAM1 + $01
+
+loc_93eb:
+	lda WORK_RAM2 + $90
+	cmp #$02
+	lbeq loc_932d
+	jmp loc_9462
+
+loc_93f7:
+	lda #$00
+	sta WORK_RAM1 + $01
+	inc  WORK_RAM1 + $00
+	bne loc_93eb
+
+loc_93ff:
+	inc WORK_RAM2 + $90
+	lda #$00
+	sta  WORK_RAM1 + $00
+	sta WORK_RAM1 + $01
+
+	lda #$01
+	sta WORK_RAM2 + $92
+
+	jsr sub_9e4f
+
+	lda #$00
+	jsr sub_9979
+	rts	
+	
+loc_9415:
+	
+	// ldy #$E7FC
+	lda #<e7fc
+	sta byte_5
+	lda #>e7fc
+	sta byte_6
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	// ldd #$2030
+	lda #$20
+	sta A_Register
+	lda #$30
+	sta B_Register
+
+	// sta 6,u
+	lda A_Register
+	ldy #$06
+	sta (U_L),y
+
+	// stb 4,u
+	lda B_Register
+	ldy #$04
+	sta (U_L),y
+
+	// clra
+	lda #$00
+
+	// jsr sub_9E1F
+	jsr sub_9e1f
+
+	// lda #4
+	lda #$04
+
+	// sta $A,u
+	ldy #$0a
+	sta (U_L),y
+
+	// sty ,u
+	lda byte_5
+	ldy #$00
+	sta (U_L),y
+	lda byte_6
+	iny
+	sta (U_L),y
+
+	// lda #1
+	lda #$01
+
+	// sta $C,u
+	ldy #$0c
+	sta (U_L),y
+
+	// lda #$FF
+	lda #$ff
+
+	// sta $D,u
+	ldy #$0d
+	sta (U_L),y
+
+	// sta $B,u
+	ldy #$0b
+	sta (U_L),y
+
+	// clra
+	lda #$00
+
+	// jsr sub_9979
+	jsr sub_9979
+
+	// clr word_54C4
+	lda #$00
+	sta WORK_RAM2 + $94
+
+	// clr word_54C0+1
+	sta WORK_RAM2 + $91
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	// ldd #$0800
+	lda #$08
+	sta A_Register
+	lda #$00
+	sta B_Register
+
+	// std $3A,u
+	lda A_Register
+	ldy #$3a
+	sta (U_L),y
+	lda B_Register
+	iny
+	sta (U_L),y
+
+	// std $3C,u
+	lda A_Register
+	ldy #$3c
+	sta (U_L),y
+	lda B_Register
+	iny
+	sta (U_L),y
+
+	// inc word_54C0
+	inc WORK_RAM2 + $90
+
+	// clr word_5435
+	lda #$00
+	sta WORK_RAM2 + $05
+
+	// clr word_5435+1
+	sta WORK_RAM2 + $06
+	rts
+
+	
+loc_9458: // to do, part of sub_9315
+	jmp *
+
+loc_9462: // to do, part of sub_9315
+	jmp *
+
+sub_9979: // to do, part of sub_9315
+	jmp *
+	
+sub_9bbc:
+	// ldx #$51F2
+	LDX(WORK_RAM1 + $1c2)
+
+	// clra
+	lda #$00
+
+	// leax a,x
+	clc
+	adc X_L
+	sta X_L
+	bcc !+
+	inc X_H
+!:
+
+	// lda ,x
+	ldy #$00
+	lda (X_L),y
+
+	// oraa 5,x
+	ldy #$05
+	ora (X_L),y
+
+	// ldb word_54C2+1
+	sta A_Register
+	lda WORK_RAM2 + $93
+	sta B_Register
+	beq loc_9bdf
+
+	// tfr a,b
+	lda A_Register
+	sta B_Register
+
+	// andb #3
+	and #$03
+	sta B_Register
+	beq loc_9bdf
+
+	// cmpb #2
+	cmp #$02
+	beq loc_9bdb
+
+	// anda #$FC
+	lda A_Register
+	and #$fc
+	ora #$02
+	sta A_Register
+	jmp loc_9bdf
+
+loc_9bdb:
+	// anda #$FC
+	lda A_Register
+	and #$fc
+	ora #$01
+	sta A_Register
+
+loc_9bdf:
+	// cmpa #$10
+	lda A_Register
+	cmp #$10
+	bcc locret_9bf9
+
+	// tfr a,b
+	sta B_Register
+
+	// andb #$0F
+	and #$0f
+	sta B_Register
+
+	// cmpb #1
+	cmp #$01
+	beq loc_9bf5
+
+	// cmpb #6
+	cmp #$06
+	bne locret_9bf9
+
+	// anda #$30
+	lda A_Register
+	and #$30
+	ora #$01
+	sta A_Register
+	jmp locret_9bf9
+
+loc_9bf5:
+	// anda #$30
+	lda A_Register
+	and #$30
+	ora #$06
+	sta A_Register
+
+locret_9bf9:
+	lda A_Register
+	rts
+	
+	
+sub_9bfa:
+	// jsr sub_9BBC
+	jsr sub_9bbc
+
+	// anda #$0F
+	and #$0f
+
+	// cmpa #3
+	cmp #$03
+	bcc loc_9c09
+
+	// deca
+	dec
+
+	// cmpa #6
+	cmp #$06
+	bcc loc_9c09
+
+	// deca
+	dec
+
+loc_9c09:
+	// sta word_54C2
+	sta WORK_RAM2 + $92
+	rts
+	
+sub_9e1f:
+
+	// tfr a,b
+	sta B_Register
+
+	// ldx #$E9C3
+	LDX(e9c0+3)
+
+	// ldy #$E9CA
+	lda #<e9ca
+	sta byte_5
+	lda #>e9ca
+	sta byte_6
+
+	// clra / lda d,x
+	lda B_Register
+	clc
+	adc X_L
+	sta X_L
+	lda X_H
+	adc #$00
+	sta X_H
+	ldy #$00
+	lda (X_L),y          // count from e9c3[index]
+	pha
+
+	// clra / aslb
+	lda B_Register
+	asl
+	sta B_Register
+
+	// ldy d,y   ; base is still byte_5/byte_6 = e9ca
+	lda B_Register
+	clc
+	adc byte_5
+	sta X_L
+	lda byte_6
+	adc #$00
+	sta X_H
+	ldy #$00
+	lda (X_L),y
+	sta byte_5
+	iny
+	lda (X_L),y
+	sta byte_6
+
+	// puls a
+	pla
+	// tfr a,b
+	sta B_Register
+
+	// tfr u,x
+	lda U_L
+	sta X_L
+	lda U_H
+	sta X_H
+
+	// leax -$10,x
+	sec
+	lda X_L
+	sbc #$10
+	sta X_L
+	lda X_H
+	sbc #$00
+	sta X_H
+
+loc_9e3a:
+
+	// lda ,y+
+	lda byte_5 // 03
+	sta X_L
+	lda byte_6
+	sta X_H	// 01
+
+	ldy #$00
+	lda (X_L),y
+	
+	
+	pha
+	inc byte_5
+	bne !+
+	inc byte_6
+!:
+	pla
+
+	// adda 4,u
+	clc
+	ldy #$04
+	adc (U_L),y
+
+	// sta $14,x
+	ldy #$14
+	sta (X_L),y
+
+	// lda ,y+
+	ldy #$00
+	lda (byte_5),y
+	pha
+	inc X_L
+	bne !+
+	inc X_H
+!:
+	pla
+
+	// adda 6,u
+	clc
+	ldy #$06
+	adc (U_L),y
+
+	// sta $16,x
+	ldy #$16
+	sta (X_L),y
+
+	// leax $10,x
+	ADDX($10)
+
+	// decb
+	dec B_Register
+	bne loc_9e3a
+
+	rts
+	
+sub_9e4f: // to do, part of sub_9315
+	jmp *
+
+sub_a270:
+	// ldy #$5090
+	lda #<WORK_RAM1+$60
+	sta byte_5
+	lda #>WORK_RAM1+$60
+	sta byte_6
+
+	// lda word_5430+1
+	lda WORK_RAM2 + $01	// enemy name index, 0x2 for nucha
+
+	// cmpa word_EA1C+1
+	cmp ea1c+1				// is enemy feedle ?
+	bne loc_a2b4			// nope
+
+	// ldy #$50D0
+	lda #<WORK_RAM1+$a0
+	sta byte_5
+	lda #>WORK_RAM1+$a0
+	sta byte_6
+
+	// lda #$FF
+	lda #$ff
+	sta byte_ad
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	// ldx #$50D0
+	LDX(WORK_RAM1+$a0)
+
+	// ldb #3
+	lda #$03
+	sta B_Register
+
+loc_a28c:
+	// lda 4,u
+	ldy #$04
+	lda (U_L),y
+	sta A_Register
+
+	// tst word_54C2+1
+	lda WORK_RAM2 + $93
+	beq loc_a295
+
+	// adda #$10
+	lda A_Register
+	clc
+	adc #$10
+	sta A_Register
+
+loc_a295:
+	// suba 4,x
+	lda A_Register
+	pha
+	ldy #$04
+	lda (X_L),y
+	sta tmp
+	pla
+	sec
+	sbc tmp
+	sta A_Register
+	bcs loc_a2a1
+
+	// tst word_54C2+1
+	lda WORK_RAM2 + $93
+	bne loc_a2ae
+
+	// coma
+	lda A_Register
+	eor #$ff
+	sta A_Register
+	jmp loc_a2a6
+
+loc_a2a1:
+	// tst word_54C2+1
+	lda WORK_RAM2 + $93
+	beq loc_a2ae
+
+loc_a2a6:
+	// cmpa $AD
+	lda A_Register
+	cmp byte_ad
+	bcs loc_a2ae
+
+	// sta $AD
+	sta byte_ad
+
+	// tfr x,y
+	lda X_L
+	sta byte_5
+	lda X_H
+	sta byte_6
+
+loc_a2ae:
+	// leax $40,x
+	ADDX($40)
+
+	// decb
+	dec B_Register
+	bne loc_a28c
+
+loc_a2b4:
+	// sty word_54E4
+	lda byte_5
+	sta WORK_RAM2 + $b4
+	lda byte_6
+	sta WORK_RAM2 + $b5
+
+	// lda word_5430+1
+	lda WORK_RAM2 + $01
+
+	// cmpa word_EA1C+1
+	cmp ea1c+1
+	bne locret_a2c5
+
+	// lda #1
+	lda #$01
+
+	// sta $31,y
+	ldy #$31
+	sta (byte_5),y
+
+locret_a2c5:
+	rts
+
+sub_a663: // to do, part of loc_8fd7
+	jmp *
+	
 	
 loc_a7db:
     lda #$10
@@ -4205,7 +5222,7 @@ locret_c3f6:
 	
 loc_c67a:	// to do
 	lda #$1
-	bra	loc_c6c3
+	jmp	loc_c6c3
 	
 	
 // to do	
@@ -4219,7 +5236,7 @@ loc_c6a2:
 // to do	
 loc_c6a6:
 	lda #$41
-	bra	loc_c6c3
+	jmp loc_c6c3
 	
 
 // to do
