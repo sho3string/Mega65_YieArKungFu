@@ -1348,24 +1348,87 @@ loc_8758:
 *                                                *
 * Arcade writes attribute bytes only to flip the *
 * energy bar - Player one only                   *
+* actual bar is drawn later using tile 0xf		*
 **************************************************/
-
+/*
 loc_8764:
 	LDX(SCREEN_BASE+(RRB_Tail_words*2*($180>>arcadeRowSize))+$180-1)
 	lda #$0f
 	sta B_Register          // 15 cells
-	ADDX(2)					 // start at 0x2b38
+	ADDX(2)				 // start at 0x2b38
 loc_876a:
 	ldy #0                   // attribute byte on MEGA65
-	//lda #$80				 // attribute flip X
+	//lda #$80				 // attribute flip X test
 	//clc
 	//adc #$08				 // preserve row mask 0x8
-	lda #$88				 // refer to above for explanation.
+	
+	lda #$08				 // add the row mask enable for byte 2
 	sta (X_L),y
 
 	ADDX(2)
 	dec B_Register
 	bne loc_876a
+	
+*/
+
+/*************************************************
+* Initialise energy bar                          *
+*                                                *
+* Arcade writes attribute bytes only to flip the *
+* energy bar - Player one only                   *
+* actual bar is drawn later using tile $0F       *
+**************************************************/
+
+loc_8764:
+	/*
+	Initialise high word colour pointers for safety
+	and move this out of scope of the loop since they won't ever hange.
+	*/
+	lda #$F8
+	sta COLPTR2
+	lda #$0F
+	sta COLPTR3
+	
+	// Start at translated arcade $5980 attr byte.
+    // Existing direct formula is still valid here.
+    LDX(SCREEN_BASE+(RRB_Tail_words*2*($180>>arcadeRowSize))+$180-1)
+
+    lda #$0f
+    sta B_Register          // 15 cells
+
+    ADDX(2)                 // start at first visible attr byte (0x2B38)
+
+loc_876a:
+    // ------------------------------------------------
+    // Screen attr byte on MEGA65:
+    // keep only row-mask enable here
+    // ------------------------------------------------
+    ldy #0
+    lda #$08
+    sta (X_L),y
+
+    // ------------------------------------------------
+    // Colour RAM byte on MEGA65:
+    // arcade used $80 for Flip X in attr byte
+    // MEGA65 uses $40 for Flip X in colour RAM
+    // ------------------------------------------------
+    sec
+    lda X_L
+    sbc #<SCREEN_BASE
+    sta COLPTR0
+
+    lda X_H
+    sbc #>SCREEN_BASE
+    sta COLPTR1
+
+    ldz #0
+    lda #$40                // MEGA65 Flip X
+    sta ((COLPTR0)),z
+
+    ADDX(2)
+    dec B_Register
+    bne loc_876a
+
 
 /******************************
 * Prints player two score     *
@@ -1379,7 +1442,7 @@ loc_876f:
 	lda #$0a
 	sta B_Register
 	jsr sub_80a1
-
+	
 	jsr sub_88bf
 	jsr sub_8922
 	
@@ -1394,7 +1457,10 @@ loc_877e:
 
 
 loc_8782:
-	// move this out of scope of the loop since they never change.
+	/*
+	Initialise high word colour pointers for safety
+	and move this out of scope of the loop since they won't ever hange.
+	*/
 	lda #$F8
 	sta COLPTR2
 	lda #$0F
