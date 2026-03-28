@@ -1,8 +1,8 @@
 *=* "Game Data - GameData.asm"
 
-/***********************************
-*0x4000 W  control port            *
-*bit 0 - flip screen			0x1   *
+/**********************************
+*0x4000 W  control port           *
+*bit 0 - flip screen		0x1   *
 *bit 1 - NMI enable			0x2   *
 *bit 2 - IRQ enable			0x4   *
 *bit 3 - coin counter A		0x8   *
@@ -253,6 +253,15 @@ oolong:										// Oolong
 	.word ArcadeToMegaTextByte($5943)
 	.byte $4F,$4F,$4C,$4F,$4E,$47
 	.byte $2f
+	
+/*	
+ko:
+	// Per-row hidden prefix bytes before visible text starts.
+	// Most rows = 0.
+	// Row 6 has a 16-byte hidden prefix due to pixie/RRB header layout.
+	.byte $4B,$4F								 // KO
+	.byte $3f									// end.
+*/
 
 ko:												// Ko
 	.word ArcadeToMegaTextByte($599F)
@@ -260,13 +269,7 @@ ko:												// Ko
 	.byte $3f
 	
 
-/*	
-ko:
-	//- This is wrong for rows that have the 8-byte pixie header before visible cells.
-	//.word SCREEN_BASE+(RRB_Tail_words*2*($19f>>arcadeRowSize))+$19f-1 // was $599F 
-	.byte $4B,$4F								 // KO
-	.byte $3f									// end.
-*/
+
 stage:
 	.word $5C97					
 	.byte $53,$54,$41,$47,$45					// STAGE
@@ -716,7 +719,7 @@ dbb2:
 	.byte $bc,$bc,$f8,$b4,$bc,$bc,$bc,$bc
 	.byte $bc,$bc,$bc,$bc
 	
-// Playfield Data
+// Playfield.
 
 e172:
 	.byte $10,$83,$33,$32,$33,$83,$83,$83
