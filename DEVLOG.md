@@ -1,6 +1,85 @@
 
 ## DevLog - Yie Ar Kung Fu Mega65 port
 
+### 3/04/2026
+
+## RRB Pixie Row Pressure Investigation
+
+While rendering the title screen using VIC-IV RRB pixies, intermittent corruption was observed when `RRB_PixiesPerRow` was set to 40.
+
+Symptoms included:
+
+- Horizontal glitches appearing above/below the title logo
+- Corruption in rows that contained large numbers of pixies
+- Behaviour differing between emulator and real hardware
+
+### Investigation
+
+A histogram-based diagnostic was introduced:
+
+- `RowPeakTable` records the maximum pixies emitted per row
+- `RRB_GlobalPeakCount` records the worst row across the frame
+
+Example diagnostic output before optimisation:
+
+RowPeakTable
+:000051AC:00000000000000000014282828140000
+:000051BC:00000000000000000006060000000000
+
+RRB_GlobalPeakCount = $27 (39 pixies)
+
+
+This showed that the **YIE AR KUNG FU logo rows were responsible for the peak usage**.
+
+The peak rows required **39 pixies**, which is very close to the observed corruption threshold.
+
+### Root Cause
+
+Sprites that are **not aligned to an 8-pixel Y boundary** require spill rows:
+
+aligned sprite → 4 pixies
+misaligned sprite → 8 pixies  
+
+
+The title logo sprites were misaligned, causing heavy spill usage across several rows.
+
+### Fix
+
+Two changes were implemented:
+
+1. Conditional spill emission
+
+if(sprite_y & 7) == 0
+emit only main rows (4 pixies)
+else
+emit full spill rows (8 pixies)  
+
+if(sprite_y & 7) == 0
+emit only main rows (4 pixies)
+else
+emit full spill rows (8 pixies)  
+
+
+2. Shift the title logo **1 pixel vertically**
+
+This placed the sprites on an **8-pixel boundary**, eliminating spill rows and reducing pressure.
+
+### Result
+
+Row usage dropped dramatically:
+
+Before: 14 28 28 28 14  
+After: 14 14 14 14  
+
+Global peak: 40 pixies → 20 pixies
+
+This represents roughly a **50% reduction in RRB pressure**.
+
+### Current Status
+
+The title screen is now stable even with:
+RRB_PixiesPerRow = 37
+
 ### 27/03/2026
 
 ### Playfield Attribute Translation Fix
@@ -10,7 +89,6 @@
 - Verified correct behaviour through direct memory testing.
 
 <img width="696" height="553" alt="{89A63EFC-02FE-4809-8E80-7A27E1D715E3}" src="https://github.com/user-attachments/assets/28fb145d-d5a5-4f8a-ac2c-c215ad698e8e" />
-
 
 Actual arcade behaviour:
 
