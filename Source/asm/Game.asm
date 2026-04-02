@@ -613,7 +613,7 @@ loc_813f:
 	adc #<(TILE_OFFSET)
 	sta (byte_f0),y
 	iny
-	lda #$00				// attribute page
+	lda #$00
 	clc
 	adc #>(TILE_OFFSET)
 	sta (byte_f0),y
@@ -643,15 +643,13 @@ loc_814a:
 	
 
 /*************************
-* Clears Sprite Data     *
-* 5030-51AF              *
+* Clears work RAM block  *
+* $5030-$51AF            *
 *************************/
 sub_814c:
     LDX(WORK_RAM1)          // emulated 6809 X = $5030
-
 loc_8152:
-    lda #0
-
+	lda #$00
     ldy #0
     sta (X_L),y             // first byte of STD ,x++
     iny
@@ -662,9 +660,7 @@ loc_8152:
 
     CMPX(WORK_RAM1 + $180)  // compare against $51B0
     BCS(loc_8152)           // 6809 BCS = branch while X < end
-
     rts
-
 
 /************************************
 * loc_8163  - RST vector         	*
@@ -748,48 +744,6 @@ sub_8218:
 // byte_1 = pointer high
 // byte_2 = tile number
 
-/*
-sub_821a:
-    lda #<SCREEN_BASE
-    sta byte_0            // pointer = $5800
-    lda #>SCREEN_BASE
-    sta byte_1
-
-    ldy #$00              // y must be 0 for (zp),y
-	
-loc_821e:
-    // ---- compute low byte of tile index ----
-    lda byte_2
-    clc
-    adc #<(TILE_OFFSET)
-    sta (byte_0),y        // store low byte
-
-    // ---- compute high byte of tile index ----
-    lda #$00              // attribute page
-    clc
-    adc #>(TILE_OFFSET)
-    iny
-    sta (byte_0),y        // store high byte
-    dey                   // restore y = 0
-
-    // ---- increment pointer by 2 ----
-    clc
-    lda byte_0
-    adc #2
-    sta byte_0
-    lda byte_1
-    adc #0
-    sta byte_1
-	
-    // ---- compare pointer to top of SCREEN_BASE ----
-    lda byte_0
-	cmp #<(SCREEN_BASE+(TOTAL_CHARS<<1)*CHARS_HIGH)
-	bne loc_821e
-	lda byte_1
-	cmp #>(SCREEN_BASE+(TOTAL_CHARS<<1)*CHARS_HIGH)
-	bne loc_821e
-	rts
-*/
 
 
 // ------------------------------------------------------------
@@ -1031,7 +985,7 @@ sub_85b3: // to do
 .const zp_tile_lo			= byte_2    // pointer into tilemap
 .const zp_tile_hi			= byte_3
 .const zp_script_idx		= byte_4    // index into script (offset from script base)
-.const zp_glyph_index		= byte_6
+.const zp_glyph_index	= byte_6
 
 
 loc_867e:
@@ -1343,33 +1297,6 @@ loc_8758:
 	jsr sub_88c5
 	jsr sub_8922
 
-/*************************************************
-* Initialise energy bar                          * 
-*                                                *
-* Arcade writes attribute bytes only to flip the *
-* energy bar - Player one only                   *
-* actual bar is drawn later using tile 0xf		*
-**************************************************/
-/*
-loc_8764:
-	LDX(SCREEN_BASE+(RRB_Tail_words*2*($180>>arcadeRowSize))+$180-1)
-	lda #$0f
-	sta B_Register          // 15 cells
-	ADDX(2)				 // start at 0x2b38
-loc_876a:
-	ldy #0                   // attribute byte on MEGA65
-	//lda #$80				 // attribute flip X test
-	//clc
-	//adc #$08				 // preserve row mask 0x8
-	
-	lda #$08				 // add the row mask enable for byte 2
-	sta (X_L),y
-
-	ADDX(2)
-	dec B_Register
-	bne loc_876a
-	
-*/
 
 /*************************************************
 * Initialise energy bar                          *
@@ -1400,11 +1327,10 @@ loc_8764:
 
 loc_876a:
     // ------------------------------------------------
-    // Screen attr byte on MEGA65:
-    // keep only row-mask enable here
+    // Screen high byte MEGA65:
     // ------------------------------------------------
     ldy #0
-    lda #$08
+    lda #>TILE_OFFSET // MSB tile index
     sta (X_L),y
 
     // ------------------------------------------------
@@ -1452,7 +1378,7 @@ loc_877e:
 
 /******************************
 * Draws the playfield         *
-* From right to left          *
+* From left to right          *
 *******************************/
 
 
@@ -1584,7 +1510,8 @@ loc_879e:
 	sta ((COLPTR0)),z
 
 	pla
-	ora #$08        // row mask
+	ora #>TILE_OFFSET  // high byte + tile MSB
+	
 
 	pha
 	clc
@@ -1854,27 +1781,6 @@ TextDone:
     jmp loc_807c
    
      
-/*	 
-	// Debug blast: write a block of tile $0f at some obvious spot
-    ldx #0
-@fill:
-
-	lda #$0f				
-	clc
-	adc #<(TILE_OFFSET)
-	sta $5880,x
-    inx
-	lda #$00
-	clc
-	adc #>(TILE_OFFSET)
-	sta $5880,x
-	inx
-	
-    cpx #40          // one row, 40 chars
-    bne @fill
-
-    jmp loc_807c     // IMPORTANT: return to the state machine
-*/
 	
 loc_8808: // seems to get called when you press start
 	jmp *
@@ -1983,13 +1889,6 @@ loc_8919:
 loc_891d:
     and #$0f
 	
-/*sub_891f:
-	ldy #0
-	sta (X_L),y
-	INC16(X_L, X_H)
-	rts
-*/
-
 	
 sub_891f:
     ldy #0
@@ -2171,9 +2070,8 @@ loc_897d:
 loc_898f:
     jsr sub_8b30
 
-    jsr BuildSpriteQueueFromArcadeRAM
-	jsr BuildPixieListFromSpriteQueue
-	jsr RRB_BuildAllRows     // builds tails for every row from pixie list
+	jsr BuildRowListsFromArcadeRAM
+	jsr RRB_BuildAllRows
 	
     // call secondary routine (Other functions)
     jsr sub_899e
@@ -2949,7 +2847,7 @@ loc_8be5://R=>L State
     inc byte_c4         // advance sub_state
 
     jsr sub_842c		// check coctail mode
-    jsr sub_814c		// Clear sprite ram
+    jsr sub_814c		// Clear work ram
 locret_8bf7:
     rts
 	
@@ -2965,20 +2863,9 @@ loc_8bf8:
     lda #0
     sta byte_c5         // reset sub_state
 
-    jsr sub_814c        // clear sprite RAM (5030–51BC)
+
+    jsr sub_814c        // clear work RAM (5030–51BC)
     jmp sub_8ca5        // clear tile bits for Konami logo + copyright
-	
-
-
-// ZP layout
-.const sprPtrLo	= byte_30   // X pointer low
-.const sprPtrHi	= byte_31   // X pointer high
-.const logoPtrLo	= byte_46   // U pointer low
-.const logoPtrHi	= byte_47   // U pointer high
-.const logoX		= byte_21   // B equivalent
-.const logoCount	= byte_20   // Y equivalent
-.const tmpPtrLo 	= byte_f4
-.const tmpPtrHi 	= byte_f5
 
 
 loc_8c06:
@@ -3008,7 +2895,8 @@ loc_8c06:
     sta logoX
 	
 loc_8c1b:
-    lda #$A0
+	//Title: Shift YIE AR KUNG FU logo by 1px to eliminate worst-case RRB row pressure
+    lda #$A0-1
     jsr sub_8c30
     beq done_first_loop
     jmp loc_8c1b
@@ -3020,7 +2908,8 @@ done_first_loop:
 	lda #$38  
 	sta logoX 
 loc_8c27:
-    lda #$90
+	//Title: Shift YIE AR KUNG FU logo by 1px to eliminate worst-case RRB row pressure
+    lda #$90-1 
 	jsr sub_8c30
     beq done_second_loop
     jmp loc_8c27
@@ -3457,8 +3346,8 @@ loc_8d9b:
     sta WORK_RAM2+$63       // word_5493 low
 
     lda byte_cc
-    sta WORK_RAM2+$33       // word_5463 high
-    sta WORK_RAM2+$63       // word_5493 high
+    sta WORK_RAM2+$34      // word_5463 high
+    sta WORK_RAM2+$64      // word_5493 high
 
     lda byte_e2
     bne locret_8dc6
@@ -3718,13 +3607,13 @@ loc_8e92:
 	
 loc_8ea2:  // to do - part of game play loop
 		
-	//bsr.w	sub_A86D					// sprite enable for enemy ?
-	//bsr.w	sub_9EA5					// draws energy bars.
-	// lots to do here.
-	
-	jsr sub_923f		// check status for waterfall
-	jsr sub_9084		// 1UP flasher 0x8b=blank, B=1UP
-	jsr sub_9315		// game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
+			//bsr.w	sub_A86D					// sprite enable for enemy ?
+			//bsr.w	sub_9EA5					// draws energy bars.
+			// lots to do here.
+		
+			jsr sub_923f		// check status for waterfall
+			jsr sub_9084		// 1UP flasher 0x8b=blank, B=1UP
+			jsr sub_9315		// game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
 loc_8ef3:
 	jmp *
 
@@ -4212,7 +4101,6 @@ locret_92ec:
 	
 
 sub_92ed:
-	// lda #$10
 	lda #$10				// #16 for what ?
 
 	// suba word_5430+1
@@ -4652,16 +4540,424 @@ loc_9415:
 	sta WORK_RAM2 + $06
 	rts
 
+sub_9953: // to do
+	jmp *
 	
 loc_9458: // to do, part of sub_9315
 	jmp *
 
 loc_9462: // to do, part of sub_9315
 	jmp *
-
-sub_9979: // to do, part of sub_9315
-	jmp *
 	
+sub_996d:
+	// sta 2,u
+	ldy #$02
+	sta (U_L),y
+
+	// stb 5,u
+	lda B_Register
+	ldy #$05
+	sta (U_L),y
+
+	// clr 3,u
+	lda #$00
+	ldy #$03
+	sta (U_L),y
+
+	// clr 7,u
+	ldy #$07
+	sta (U_L),y
+
+	// jsr sub_9CF0
+	jsr sub_9cf0
+
+locret_9978:
+	rts
+	
+sub_9979:
+	// cmpa word_5069
+	cmp WORK_RAM1 + $39 // player moved ? 0x1 - left, 0x2 - right, 0x3 - jump, 0xA - punch
+	beq loc_9986		// hasn't moved	
+
+	// cmpa #9
+	cmp #$09			// Upforward Punch attack ? ( Written at 0x9992 )
+	bcs loc_9986		// Upforward Punch attack
+
+	// ldb #$F0
+	lda #$f0
+	sta B_Register
+
+	// stb $0B,u
+	ldy #$0b
+	sta (U_L),y
+
+loc_9986:
+	// ldb word_54CE
+	lda WORK_RAM2 + $9e
+	sta B_Register
+	beq loc_998f
+
+	// cmpa #8
+	cmp #$08
+	bcc locret_9978
+
+loc_998f:
+	// sta word_5069
+	sta WORK_RAM1 + $39
+
+sub_9992:
+	// ldu #$5050
+	lda #<WORK_RAM1 + $20
+	sta U_L
+	lda #>WORK_RAM1 + $20
+	sta U_H
+
+	// ldb word_54C4
+	lda WORK_RAM2 + $94
+	sta B_Register
+	lbne loc_99f6
+
+	// ldb word_54C4+1
+	lda WORK_RAM2 + $95
+	sta B_Register
+	lbne loc_99f6
+
+	// ldb -$10,u
+	ldy #$f0
+	lda (U_L),y
+	sta B_Register
+	cmp #$01
+	lbne loc_99f6
+
+	// ldb $32,u
+	ldy #$32
+	lda (U_L),y
+	sta B_Register
+	lbne loc_99f6
+
+	// lda $19,u
+	ldy #$19
+	lda (U_L),y
+	pha
+
+	// lda #2
+	lda #$02
+
+	// sta -$10,u
+	ldy #$f0
+	sta (U_L),y
+
+	// clr $11,u
+	ldy #$11
+	lda #$00
+	sta (U_L),y
+
+	// lda $FFE0,u
+	ldy #$e0
+	lda (U_L),y
+
+	// cmpa #$10
+	cmp #$10
+	bcc loc_99bf
+
+	// suba #8
+	sec
+	sbc #$08
+	
+loc_99bf:
+	// cmpa #9
+	cmp #$09
+	beq loc_99cb
+
+	// cmpa #$0C
+	cmp #$0c
+	beq loc_99cb
+
+	// cmpa #$0F
+	cmp #$0f
+	bne loc_99ce
+	
+loc_99cb:
+	// inc $11,u
+	ldy #$11
+	lda (U_L),y
+	clc
+	adc #$01
+	sta (U_L),y
+
+loc_99ce:
+	// ldb -$0F,u
+	ldy #$f1
+	lda (U_L),y
+	sta B_Register
+
+	// clra
+	lda #$00
+
+	// ldy #$E960
+	lda #<e960
+	sta byte_5
+	lda #>e960
+	sta byte_6
+
+	// aslb
+	lda B_Register
+	asl
+	sta B_Register
+
+	// leay d,y
+	lda B_Register
+	clc
+	adc byte_5
+	sta byte_5
+	lda byte_6
+	adc #$00
+	sta byte_6
+
+	// lda ,y+
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+	ldy #$00
+	lda (X_L),y
+	inc X_L
+	bne !+
+	inc X_H
+!:
+	lda X_L
+	sta byte_5
+	lda X_H
+	sta byte_6
+
+	// jsr sub_9953
+	jsr sub_9953
+
+	// nega
+	eor #$ff
+	clc
+	adc #$01
+
+	// ldb word_51A5
+	sta A_Register
+	lda WORK_RAM1 + $175
+	sta B_Register
+
+	// stb word_54C2+1
+	sta WORK_RAM2 + $93
+
+	// ldb ,y
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+	ldy #$00
+	lda (X_L),y
+	sta B_Register
+
+	// jsr sub_996D
+	lda B_Register
+	jsr sub_996d
+
+	// clr $FFE2,u
+	ldy #$e2
+	lda #$00
+	sta (U_L),y
+
+	// puls a
+	pla
+	
+loc_99ee:
+	// cmpa #9
+	cmp #$09
+	bcc loc_99f6
+
+	// suba #8
+	sec
+	sbc #$08
+
+	// bra loc_99ee
+	jmp loc_99ee
+
+loc_99f6:
+	// sta $35,u
+	ldy #$35
+	sta (U_L),y
+
+	// ldu #$5050
+	lda #<WORK_RAM1 + $20
+	sta U_L
+	lda #>WORK_RAM1 + $20
+	sta U_H
+
+	// cmpa #9
+	cmp #$09
+	bcs loc_9a02
+
+	// inc -3,u
+	ldy #$fd
+	lda (U_L),y
+	clc
+	adc #$01
+	sta (U_L),y
+
+loc_9a02:
+	// ldy #$E7C0
+	lda #<e7c0
+	sta byte_5
+	lda #>e7c0
+	sta byte_6
+
+	// ldx #$E7FC
+	LDX(e7fc) // Player sprite frames
+
+	// asla
+	asl
+
+	// leay a,y
+	clc
+	adc byte_5
+	sta byte_5
+	lda byte_6
+	adc #$00
+	sta byte_6
+
+	// leax a,x
+	clc
+	adc X_L
+	sta X_L
+	lda X_H
+	adc #$00
+	sta X_H
+
+	// ldd ,x
+	ldy #$00
+	lda (X_L),y
+	sta A_Register
+	iny
+	lda (X_L),y
+	sta B_Register
+
+	// std ,u
+	lda A_Register
+	ldy #$00
+	sta (U_L),y
+	lda B_Register
+	iny
+	sta (U_L),y
+
+	// lda $23,u
+	ldy #$23
+	lda (U_L),y
+	bne loc_9a46
+
+	// ldd word_54C4
+	lda WORK_RAM2 + $94
+	sta A_Register
+	lda WORK_RAM2 + $95
+	sta B_Register
+	ora A_Register
+	bne loc_9a2c
+
+	// lda $17,u
+	ldy #$17
+	lda (U_L),y
+	cmp #$03
+	bcs loc_9a2c
+
+	// cmpa word_54C6
+	cmp WORK_RAM2 + $96
+	bne loc_9a2c
+
+	// lda $C,u
+	ldy #$0c
+	lda (U_L),y
+	bne loc_9a46
+	
+loc_9a2c:
+	// lda -$10,u
+	ldy #$f0
+	lda (U_L),y
+
+	// cmpa #2
+	cmp #$02
+	beq loc_9a3a
+
+	// lda ,y+
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+	ldy #$00
+	lda (X_L),y
+	inc X_L
+	bne !+
+	inc X_H
+!:
+	lda X_L
+	sta byte_5
+	lda X_H
+	sta byte_6
+
+	// cmpa #2
+	cmp #$02
+	bcs loc_9a42
+	jmp loc_9a3c
+
+loc_9a3a:
+	// clr -$10,u
+	ldy #$f0
+	lda #$00
+	sta (U_L),y
+
+loc_9a3c:
+	// ldb #$80
+	lda #$80
+	sta B_Register
+
+	// bra loc_9a44
+	jmp loc_9a44
+
+loc_9a42:
+	// ldb ,y
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+	ldy #$00
+	lda (X_L),y
+	sta B_Register
+
+loc_9a44:
+	// std $0C,u
+	lda A_Register
+	ldy #$0c
+	sta (U_L),y
+	lda B_Register
+	iny
+	sta (U_L),y
+
+loc_9a46:
+	// clr $23,u
+	ldy #$23
+	lda #$00
+	sta (U_L),y
+
+	// lda #4
+	lda #$04
+
+	// sta $0A,u
+	ldy #$0a
+	sta (U_L),y
+
+	// clra
+	lda #$00
+
+	// jsr sub_9C19
+	jsr sub_9c19
+
+	rts
+
 sub_9bbc:
 	// ldx #$51F2
 	LDX(WORK_RAM1 + $1c2)
@@ -4783,7 +5079,14 @@ loc_9c09:
 	// sta word_54C2
 	sta WORK_RAM2 + $92
 	rts
+
+sub_9c19:
+	jmp *
 	
+sub_9cf0: // to do
+	jmp *
+	
+
 sub_9e1f:
 
 	// tfr a,b
