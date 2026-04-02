@@ -1,16 +1,14 @@
 // RRB variables
 
-.const RRB_PixiesPerRow			= 40
-.const RRB_Tail_words			= (RRB_PixiesPerRow * 3) + 2 				// +final GOTOX +dummy tile
-.const ROWMASK					= $08    									// color byte0 bit3
-.const GOTOX 					= $10
-.const TRANSPARENT 				= $80
+.const RRB_PixiesPerRow		= 20
+.const RRB_Tail_words		= (RRB_PixiesPerRow * 3) + 2 				// +final GOTOX +dummy tile
+.const GOTOX 				= $10
+.const TRANSPARENT 			= $80
 
 // sprite queue variables
-.const SPRITE_MAX				= 23	 									// Maximum # of sprites to queue
-.const PIXIE_MAX				= 185
-.const SPRITE_Q_ENTRY_SIZE		= 4											// 4 bytes per sprite. ( Y, X, TILE, ATTR )
-.const SPRITE_Q_SIZE				= 1 + (SPRITE_MAX * SPRITE_Q_ENTRY_SIZE) // 23 x 4 = 92 bytes 
+.const SPRITE_MAX			= 23	 									// Maximum # of sprites to queue
+.const PIXIE_MAX			= 180
+
 /*
 On arcade.
 
@@ -30,25 +28,25 @@ byte 1 - character code LSB
 .const SCREEN_BASE		= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
 .const ARCADE_VRAM_BASE	= $5800  /* Arcade character ram */
 .const SCREEN_WIDTH 		= 256	 /* arcade is 256 - 32 characters visible */
-.const SCREEN_HEIGHT 	= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
+.const SCREEN_HEIGHT 		= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
 .const CHARS_WIDE 		= (SCREEN_WIDTH / 8) 				// 32 characters.
 .const CHARS_HIGH 		= (SCREEN_HEIGHT / 8)				// 32 characters, 28 visible.
 .const TOTAL_CHARS  		= CHARS_WIDE + RRB_Tail_words   
 .const LINESTEP_BYTES 	= TOTAL_CHARS * 2 
-.const LOGICAL_WIDTH		= (CHARS_WIDE << 1) + (RRB_Tail_words << 1 ) // 64 for characters + 96 for pixies. 2 bytes for each character and pixie.
+.const LOGICAL_WIDTH		= (CHARS_WIDE * 2) + (RRB_Tail_words * 2) // 64 for characters + 96 for pixies. 2 bytes for each character and pixie.
 .const ROW_STRIDE			= $40 + (RRB_Tail_words * 2)
 .const COLOR_RAM			= $FF80000 
 //.const LOADADDR			= $40000			// use spare ram to load stuff into.
-.const GRAPHMEM  			= $20000 			// this will be our character generator at bank 2
+.const GRAPHMEM  			= $30000 			// this will be our character generator at bank 2
 .const TILE_OFFSET		= GRAPHMEM/64
 //.const MEMBANK			= LOADADDR>>16		// 0x40000 >> 16 = 4
 .const TAIL_OFF			= CHARS_WIDE*2
 .const arcadeRowSize		= 6 // offset/0x40
 .const hw_nmi_vec 		= $fffa
 .const hw_irq_vec 		= $fffe
-.const vicii_irqmask 	= $d01a
-.const ciaa_d 			= $dc0d
-.const ciab_d 			= $dd0d
+.const vicii_irqmask 		= $d01a
+.const ciaa_d 				= $dc0d
+.const ciab_d 				= $dd0d
 .const vicii_rcl 			= $d012
 .const vicii_rch 			= $d011
 .const vicii_irq			= $d019
@@ -67,6 +65,7 @@ byte 1 - character code LSB
 .const Flags				= $fa
 .const tmp					= $fb
 .const tmp2				= $fc
+
 
 // labels
 
