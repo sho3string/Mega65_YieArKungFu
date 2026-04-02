@@ -3,8 +3,6 @@
 setUpDisplay:
 	/* set up a 256x224 / 30x28 chartacter screen */
 	
-	// on arcade start of visible screen is 5881
-	
 	// 320 X 200 High res screen Mode
 	lda #$80
 	trb $D031		// clear bit 7 = H320
@@ -32,10 +30,10 @@ setUpDisplay:
 	sta $D05C
 	
 	// Top Border
-	lda #$20
+	lda #$23
 	sta $D048
 	// Bottom Border
-	lda #$f1
+	lda #$f5
 	sta $D04A
 
 	// char step
@@ -45,10 +43,14 @@ setUpDisplay:
 	sta $D059
 	
 	// 16 bit character mode, byte 0 - LSB, byte 1 first 5 bits MSB + attributes
-	lda #$05			//Enable 16 bit char numbers (bit0) and 
-	tsb $D054			//full color for chars>$ff (bit2)
+	lda #%00000101
+	tsb $d054
 	
-
+	//clear NORRDEL: when clear, double-buffering is used
+	lda #$80
+	trb $D051        // clear bit 7
+	
+	
 	// Set screen address 
 	lda #<SCREEN_BASE
 	sta $D060
