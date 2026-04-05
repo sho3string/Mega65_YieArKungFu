@@ -12,9 +12,9 @@ irq_handler:
     and #$01
     beq noIrq
 	
-	lda RRB_FramePhase
-    eor #1
-    sta RRB_FramePhase
+	//lda RRB_FramePhase
+    //eor #1
+    //sta RRB_FramePhase
 	
     // ACK IMMEDIATELY
     lda #$01
