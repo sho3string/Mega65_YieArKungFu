@@ -73,21 +73,7 @@ Flags.N = (A & $80)
 }
 
 	
-	
-// register operations, load, store ..etc
-	
-.macro CLRB() {
-    pha
-    lda #0
-    sta B_Register
 
-    // Z=1, N=0, C unchanged
-    lda Flags
-    and #%00000001      // keep carry only
-    ora #%00000010      // set Z
-    sta Flags
-    pla
-}
 
 .macro LDA(addr) {
     lda addr
@@ -151,6 +137,22 @@ Flags.N = (A & $80)
     sta U_H
 }
 
+.macro LDD(imm) {
+	lda #>imm
+	sta A_Register
+	lda #<imm
+	sta B_Register
+}
+
+.macro LDD_X() {
+	ldy #0
+	lda (X_L),y
+	sta A_Register
+	iny
+	lda (X_L),y
+	sta B_Register
+}
+
 .macro LDY(addr) {
     lda #<addr
     sta Y_L
@@ -165,12 +167,15 @@ Flags.N = (A & $80)
     sta X_H
 }
 
-.macro INC16(lo,hi) {
-    inc lo
-    bne !+
-    inc hi
-!:
+.macro ASLB() {
+	lda B_Register
+	asl
+	sta B_Register
 }
+
+
+
+// Arithmetic
 
 .macro ADDX(imm) {
     clc
@@ -205,6 +210,224 @@ Flags.N = (A & $80)
 }
 
 
+.macro DEX16() {
+	lda X_L
+	bne !+
+	dec X_H
+!:
+	dec X_L
+}
+
+.macro INC16(lo,hi) {
+	inc lo
+	bne !+
+	inc hi
+!:
+}
+
+.macro DEC_Y(off) {
+	pha
+	ldy #off
+	lda (Y_L),y
+	sec
+	sbc #$01
+	sta (Y_L),y
+
+	// Carry unchanged for 6809 DEC
+	// Zero / Negative updated from result
+	php
+	pha                    // save result
+	lda Flags
+	and #%00000001         // keep carry only
+	sta Flags
+	pla                    // restore result
+
+	cmp #$00
+	bne !not_zero+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!not_zero:
+	cmp #$80
+	bcc !not_negative+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!not_negative:
+	pla
+}
+
+.macro DEC_U(off) {
+	pha
+	ldy #off
+	lda (U_L),y
+	sec
+	sbc #$01
+	sta (U_L),y
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+.macro DEC_B() {
+	pha
+	lda B_Register
+	sec
+	sbc #$01
+	sta B_Register
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+.macro DEC_A() {
+	pha
+	lda A_Register
+	sec
+	sbc #$01
+	sta A_Register
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+
+
+.macro MUL() {
+	// 6809 MUL
+	// in : A_Register * B_Register
+	// out: A_Register:B_Register = 16-bit result
+	//      A_Register = hi, B_Register = lo
+	//
+	// uses: byte_40-byte_44
+
+	lda A_Register
+	sta byte_40          // multiplier
+
+	lda B_Register
+	sta byte_41          // multiplicand lo
+
+	lda #$00
+	sta byte_42          // multiplicand hi
+	sta byte_43          // result lo
+	sta byte_44          // result hi
+
+    ldx #$08
+!loop:
+	lsr byte_40
+	bcc !skip+
+
+	clc
+	lda byte_43
+	adc byte_41
+	sta byte_43
+
+	lda byte_44
+	adc byte_42
+	sta byte_44
+
+!skip:
+	asl byte_41
+	rol byte_42
+
+	dex
+	bne !loop-
+
+	lda byte_44
+	sta A_Register
+	lda byte_43
+	sta B_Register
+}
+
+.macro LEAU_SUB(val) {
+	sec
+	lda U_L
+	sbc #<val
+	sta U_L
+	lda U_H
+	sbc #>val
+	sta U_H
+}
+
+
+// Memory operations
+
+
+.macro CLRA() {
+	pha
+	lda #$00
+	sta A_Register
+
+	// C=0, Z=1, N=0
+	lda #$02
+	sta Flags
+	pla
+}
+.macro CLRB() {
+	pha
+	lda #$00
+	sta B_Register
+
+	// C=0, Z=1, N=0
+	// V also cleared, if you model it in Flags add that too.
+	lda #$02
+	sta Flags
+	pla
+}
+
+
+
 .macro DAA_A() {
     cmp #$0a
     bcc !no_low+
@@ -217,6 +440,124 @@ Flags.N = (A & $80)
     adc #$60
 !done:
 }
+
+.macro TFR_A_B() {
+	lda A_Register
+	sta B_Register
+}
+
+.macro TFR_U_X() {
+	lda U_L
+	sta X_L
+	lda U_H
+	sta X_H
+}
+
+.macro TFR_Y_U() {
+	lda Y_L
+	sta U_L
+	lda Y_H
+	sta U_H
+}
+
+.macro INC_B() {
+	pha
+	lda B_Register
+	clc
+	adc #$01
+	sta B_Register
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+
+.macro INC_U(off) {
+	pha
+	ldy #off
+	lda (U_L),y
+	clc
+	adc #$01
+	sta (U_L),y
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+.macro INC_Y(off) {
+	pha
+	ldy #off
+	lda (Y_L),y
+	clc
+	adc #$01
+	sta (Y_L),y
+
+	// Carry unchanged for 6809 INC
+	// Zero / Negative updated from result
+	php
+	pha                    // save result
+	lda Flags
+	and #%00000001         // keep carry only
+	sta Flags
+	pla                    // restore result
+
+	cmp #$00
+	bne !not_zero+
+	lda Flags
+	ora #%00000010
+	sta Flags
+	!not_zero:
+	cmp #$80
+	bcc !not_negative+
+	lda Flags
+	ora #%00000100
+	sta Flags
+	!not_negative:
+	pla
+}
+
+.macro INX16() {
+	inc X_L
+	bne !+
+	inc X_H
+!:
+}
+
+
 
 .macro CMPU(val) {
     // compare U with val, set Flags bit0 like 6809 C
@@ -329,4 +670,27 @@ Flags.N = (A & $80)
     pla
     ldy #0
     sta (byte_5),y
+}
+
+.macro STD_PTR(ptrlo) {
+    ldy #0
+    lda A_Register
+    sta (ptrlo),y
+    iny
+    lda B_Register
+    sta (ptrlo),y
+}
+
+// branching
+
+.macro BNE(label) {
+	lda Flags
+	and #%00000010
+	beq label
+}
+
+.macro BEQ(label) {
+	lda Flags
+	and #%00000010
+	bne label
 }
