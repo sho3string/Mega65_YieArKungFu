@@ -1,6 +1,18 @@
 
 ## DevLog - Yie Ar Kung Fu Mega65 port
 
+### 6/04/2026
+
+Implemented energy meter functionality
+
+TODO  
+
+Pending:
+Combat damage logic  
+Energy depletion updates  
+Remaining AI / gameplay routines  
+Gameplay routines triggered by combat events
+
 ### 3/04/2026
 
 ## RRB Pixie Row Pressure Investigation
