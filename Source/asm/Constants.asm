@@ -44,12 +44,12 @@ byte 1 - character code LSB
 .const arcadeRowSize		= 6 // offset/0x40
 .const hw_nmi_vec 		= $fffa
 .const hw_irq_vec 		= $fffe
-.const vicii_irqmask 		= $d01a
-.const ciaa_d 				= $dc0d
-.const ciab_d 				= $dd0d
-.const vicii_rcl 			= $d012
-.const vicii_rch 			= $d011
-.const vicii_irq			= $d019
+.const vicii_irqmask 	= $d01a
+.const ciaa_d 			= $dc0d
+.const ciab_d 			= $dd0d
+.const vicii_rcl 		= $d012
+.const vicii_rch 		= $d011
+.const vicii_irq		= $d019
 
 // 6809 registers
 .const Y_L					= $aa
