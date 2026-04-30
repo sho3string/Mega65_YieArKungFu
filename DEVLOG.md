@@ -1,6 +1,60 @@
 
 ## DevLog - Yie Ar Kung Fu Mega65 port
 
+### 30/04/2026 – IRQ Race Condition + Sprite Flip Fix
+
+Resolved a **critical real hardware instability issue** in the command queue consumer (`loc_807c`) and completed a major fix to **sprite flipping in the pixie (RRB) pipeline**.
+
+These fixes significantly improved:
+
+- Stability on MEGA65 hardware
+- Correct handler dispatch
+- Proper UI rendering (lives, text)
+- Accurate sprite flipping (no more “inside out” limbs)
+
+---
+
+### Issue 1 – IRQ Race Condition (Producer / Consumer Queue)
+
+### Symptoms
+
+- Incorrect handler dispatch (jumping into data, e.g. `$93EC`)
+- Corrupted command values (`A = $09` instead of `$03`)
+- Missing or broken UI elements (lives not displaying correctly)
+- Behaviour diverged from MAME
+- **Only reproducible on real hardware** (not in emulator)
+
+---
+
+### Root Cause
+
+The consumer performs a multi-step pointer read:
+
+```asm
+lda byte_da
+sta byte_7
+lda byte_db
+sta byte_8
+ldy #0
+lda (byte_7),y
+```
+
+### Issue 2 – Sprite Flip (Pixie / RRB Pipeline)
+
+### Symptoms
+
+- Sprites appeared **“inside out”** when flipped horizontally
+- Legs and feet rendered incorrectly
+- Lower parts of sprites (feet) were especially broken
+- Flip looked partially correct but visually wrong overall
+
+---
+
+### Root Cause
+
+Arcade hardware flips **entire 16×16 sprites**, while the MEGA65 renderer outputs them as **four independent 8×8 pixies**:
+
+
 ### 6/04/2026
 
 Implemented energy meter functionality
