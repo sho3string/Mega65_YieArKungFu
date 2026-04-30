@@ -72,15 +72,11 @@ Flags.N = (A & $80)
 !done:
 }
 
-	
-
 
 .macro LDA(addr) {
     lda addr
     sta A_Register
 }
-
-
 
 // Branch Macros
 
@@ -93,7 +89,19 @@ Flags.N = (A & $80)
 .macro BCC(label) {
     lda Flags
     and #1
-    beq label
+    lbeq label
+}
+
+.macro BNE(label) {
+	lda Flags
+	and #%00000010
+	lbeq label
+}
+
+.macro BEQ(label) {
+	lda Flags
+	and #%00000010
+	lbne label
 }
 
 // if X >= addr then branch
@@ -153,24 +161,47 @@ Flags.N = (A & $80)
 	sta B_Register
 }
 
+.macro LDD_Y_OFF(off) {
+	clc
+	lda Y_L
+	adc #<off
+	sta byte_5
+	lda Y_H
+	adc #>off
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sta A_Register
+	iny
+	lda (byte_5),y
+	sta B_Register
+}
+
 .macro LDY(addr) {
+	pha
     lda #<addr
     sta Y_L
     lda #>addr
     sta Y_H
+	pla
 }
 
 .macro LDX(addr) {
+	pha
     lda #<addr
     sta X_L
     lda #>addr
     sta X_H
+	pla
 }
 
 .macro ASLB() {
+	pha
 	lda B_Register
 	asl
 	sta B_Register
+	pla
 }
 
 
@@ -178,6 +209,7 @@ Flags.N = (A & $80)
 // Arithmetic
 
 .macro ADDX(imm) {
+	pha
     clc
     lda X_L
     adc #<imm
@@ -185,9 +217,11 @@ Flags.N = (A & $80)
     lda X_H
     adc #>imm
     sta X_H
+	pla
 }
 
 .macro ADDY(imm) {
+	pha
     clc
     lda Y_L
     adc #<imm
@@ -195,11 +229,13 @@ Flags.N = (A & $80)
     lda Y_H
     adc #>imm
     sta Y_H
+	pla
 }
 
 
 // U += imm16
 .macro ADDU(imm) {
+	pha
     clc
     lda U_L
     adc #<imm
@@ -207,15 +243,18 @@ Flags.N = (A & $80)
     lda U_H
     adc #>imm
     sta U_H
+	pla
 }
 
 
 .macro DEX16() {
+	pha
 	lda X_L
 	bne !+
 	dec X_H
 !:
 	dec X_L
+	pla
 }
 
 .macro INC16(lo,hi) {
@@ -233,25 +272,25 @@ Flags.N = (A & $80)
 	sbc #$01
 	sta (Y_L),y
 
-	// Carry unchanged for 6809 DEC
-	// Zero / Negative updated from result
-	php
-	pha                    // save result
-	lda Flags
-	and #%00000001         // keep carry only
-	sta Flags
-	pla                    // restore result
+	tax                    // save result in X
 
-	cmp #$00
+	// preserve carry only
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
 	bne !not_zero+
 	lda Flags
-	ora #%00000010
+	ora #%00000010         // Z
 	sta Flags
 !not_zero:
-	cmp #$80
-	bcc !not_negative+
+
+	txa
+	and #%10000000
+	beq !not_negative+
 	lda Flags
-	ora #%00000100
+	ora #%00000100         // N
 	sta Flags
 !not_negative:
 	pla
@@ -320,6 +359,44 @@ Flags.N = (A & $80)
 	sec
 	sbc #$01
 	sta A_Register
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+.macro DEC_Y_NEG(off) {
+	pha
+
+	sec
+	lda Y_L
+	sbc #off
+	sta byte_5
+	lda Y_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sec
+	sbc #$01
+	sta (byte_5),y
 
 	tax
 	lda Flags
@@ -415,17 +492,9 @@ Flags.N = (A & $80)
 	pla
 }
 .macro CLRB() {
-	pha
 	lda #$00
 	sta B_Register
-
-	// C=0, Z=1, N=0
-	// V also cleared, if you model it in Flags add that too.
-	lda #$02
-	sta Flags
-	pla
 }
-
 
 
 .macro DAA_A() {
@@ -446,18 +515,55 @@ Flags.N = (A & $80)
 	sta B_Register
 }
 
+.macro TFR_B_A() {
+	lda B_Register
+	sta A_Register
+}
+
 .macro TFR_U_X() {
+	pha
 	lda U_L
 	sta X_L
 	lda U_H
 	sta X_H
+	pla
 }
 
 .macro TFR_Y_U() {
+	pha
 	lda Y_L
 	sta U_L
 	lda Y_H
 	sta U_H
+	pla
+}
+
+.macro INC_A() {
+	pha
+	lda A_Register
+	clc
+	adc #$01
+	sta A_Register
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
 }
 
 .macro INC_B() {
@@ -526,27 +632,24 @@ Flags.N = (A & $80)
 	adc #$01
 	sta (Y_L),y
 
-	// Carry unchanged for 6809 INC
-	// Zero / Negative updated from result
-	php
-	pha                    // save result
+	pha                    /* save result */
 	lda Flags
-	and #%00000001         // keep carry only
+	and #%00000001         /* keep carry only */
 	sta Flags
-	pla                    // restore result
+	pla                    /* restore result */
 
 	cmp #$00
 	bne !not_zero+
 	lda Flags
 	ora #%00000010
 	sta Flags
-	!not_zero:
+!not_zero:
 	cmp #$80
 	bcc !not_negative+
 	lda Flags
 	ora #%00000100
 	sta Flags
-	!not_negative:
+!not_negative:
 	pla
 }
 
@@ -557,6 +660,91 @@ Flags.N = (A & $80)
 !:
 }
 
+.macro INY16() {
+	inc Y_L
+	bne !+
+	inc Y_H
+!:
+}
+
+.macro INC_U_NEG(off) {
+	pha
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	clc
+	adc #$01
+	sta (byte_5),y
+
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
+.macro INC_Y_NEG(off) {
+	pha
+
+	/* compute Y - off */
+	sec
+	lda Y_L
+	sbc #off
+	sta byte_5
+	lda Y_H
+	sbc #$00
+	sta byte_6
+
+	/* increment */
+	ldy #$00
+	lda (byte_5),y
+	clc
+	adc #$01
+	sta (byte_5),y
+
+	/* update 6809-style flags: Z / N (C unchanged) */
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+	pla
+}
+
 
 
 .macro CMPU(val) {
@@ -564,6 +752,7 @@ Flags.N = (A & $80)
     // C6809 = 1 if U < val, else 0
 
     // first compare high
+	pha
     lda U_H
     cmp #>val
     bcc !u_less+          // U_H < const_H → U < val
@@ -585,28 +774,104 @@ Flags.N = (A & $80)
     sta Flags
 
 !done:
+	pla
 }
 
 .macro CMPX(val) {
-    lda X_H
-    cmp #>val
-    bcc !x_less+
-    bne !x_greater+
+	pha
+	lda X_H
+	cmp #>val
+	bcc !x_less+
+	bne !x_greater+
 
-    lda X_L
-    cmp #<val
-    bcc !x_less+
+	lda X_L
+	cmp #<val
+	bcc !x_less+
+	bne !x_greater+
+
+	/* equal */
+	lda #%00000010
+	sta Flags
+	jmp !done+
 
 !x_greater:
-    lda #0
-    sta Flags
-    jmp !done+
+	lda #$00
+	sta Flags
+	jmp !done+
 
 !x_less:
-    lda #1
-    sta Flags
+	lda #%00000001
+	sta Flags
 
 !done:
+	pla
+}
+
+.macro CMPY(val) {
+	pha
+	lda Y_H
+	cmp #>val
+	bcc !y_less+
+	bne !y_greater+
+
+	lda Y_L
+	cmp #<val
+	bcc !y_less+
+	bne !y_greater+
+
+	/* equal */
+	lda #%00000010
+	sta Flags
+	jmp !done+
+
+!y_greater:
+	lda #$00
+	sta Flags
+	jmp !done+
+
+!y_less:
+	lda #%00000001
+	sta Flags
+
+!done:
+	pla
+}
+
+.macro CMPA_U_NEG(off) {
+	sta tmp
+
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda tmp
+	cmp (byte_5),y
+}
+
+.macro CMPB_U_NEG(off) {
+	sta tmp+1              /* preserve host A */
+
+	lda B_Register
+	sta tmp
+
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda tmp
+	cmp (byte_5),y
+
+	/* do NOT restore A here if caller branches on native flags */
 }
 
 
@@ -672,6 +937,23 @@ Flags.N = (A & $80)
     sta (byte_5),y
 }
 
+.macro STD_U_NEG(off) {
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda A_Register
+	sta (byte_5),y
+	iny
+	lda B_Register
+	sta (byte_5),y
+	}
+
 .macro STD_PTR(ptrlo) {
     ldy #0
     lda A_Register
@@ -681,16 +963,310 @@ Flags.N = (A & $80)
     sta (ptrlo),y
 }
 
-// branching
-
-.macro BNE(label) {
-	lda Flags
-	and #%00000010
-	beq label
+.macro LEAY_NEG_TO_TMP(off) {
+	pha
+	sec
+	lda Y_L
+	sbc #off
+	sta byte_5
+	lda Y_H
+	sbc #$00
+	sta byte_6
+	pla
 }
 
-.macro BEQ(label) {
-	lda Flags
-	and #%00000010
-	bne label
+.macro LEAU_NEG_TO_TMP(off) {
+	pha
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+	pla
 }
+
+.macro LDA_Y_NEG(off) {
+	LEAY_NEG_TO_TMP(off)
+	ldy #$00
+	lda (byte_5),y
+}
+
+.macro LDB_Y_NEG(off) {
+	pha
+	LEAY_NEG_TO_TMP(off)
+	ldy #$00
+	lda (byte_5),y
+	sta B_Register
+
+	/* update flags like 6809 LDB */
+	tax
+	lda Flags
+	and #%00000001        /* preserve carry */
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010        /* Z */
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100        /* N */
+	sta Flags
+!:
+	pla
+}
+
+
+.macro LDA_U_NEG(off) {
+	pha
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+	ldy #$00
+	lda (byte_5),y
+	sta A_Register
+
+	/* update emulated flags: Z / N, C unchanged */
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:	
+	pla
+}
+
+.macro LDB_U_NEG(off) {
+	pha
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+	ldy #$00
+	lda (byte_5),y
+	sta B_Register
+	pla
+}
+
+.macro STA_Y_NEG(off) {
+	LEAY_NEG_TO_TMP(off)
+	ldy #$00
+	lda A_Register
+	sta (byte_5),y
+}
+
+.macro STB_Y_NEG(off) {
+	LEAY_NEG_TO_TMP(off)
+	ldy #$00
+	lda B_Register
+	sta (byte_5),y
+}
+
+.macro STD_Y_NEG(off) {
+	
+    sec
+    lda Y_L
+    sbc #off
+    sta byte_5
+    lda Y_H
+    sbc #$00
+    sta byte_6
+
+    ldy #$00
+    lda A_Register
+    sta (byte_5),y
+    iny
+    lda B_Register
+    sta (byte_5),y
+}
+
+.macro STA_U_NEG(off) {
+	pha
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+	pla
+	ldy #$00
+	sta (byte_5),y
+}
+
+.macro CLR_U_NEG(off) {
+	CLRA()
+	STA_U_NEG(off)
+}
+
+.macro CLR_Y(off) {
+	pha
+	ldy #off
+	lda #$00
+	sta (Y_L),y
+	lda #$02
+	sta Flags
+	pla
+}
+
+.macro CLR_Y_NEG(off) {
+	pha
+	sec
+	lda Y_L
+	sbc #off
+	sta byte_5
+	lda Y_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda #$00
+	sta (byte_5),y
+
+	/* 6809 CLR flags: C=0, Z=1, N=0 */
+	lda #$02
+	sta Flags
+	pla
+}
+
+.macro TST_Y_NEG(off) {
+	sec
+	lda Y_L
+	sbc #off
+	sta byte_5
+	lda Y_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+
+	/* update 6809 flags: Z / N, C unchanged */
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!:
+	txa
+	and #%10000000
+	beq !+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!:
+
+}
+
+
+// other helpers
+
+
+// ------------------------------------------------------------
+// 32-bit helpers - for access rom data in bank 1,2, 3 ..etc
+// ------------------------------------------------------------
+
+.macro LD32_IMM(ptrLo, addr) {
+	lda #<addr
+	sta ptrLo
+	lda #>addr
+	sta ptrLo+1
+	lda #((addr >> 16) & $ff)
+	sta ptrLo+2
+	lda #((addr >> 24) & $ff)
+	sta ptrLo+3
+}
+
+.macro LD32_BASE_PLUS_16(ptrLo, base, off16) {
+	pha
+	clc
+	lda #<base
+	adc off16
+	sta ptrLo
+
+	lda #>base
+	adc off16+1
+	sta ptrLo+1
+
+	lda #((base >> 16) & $ff)
+	adc #$00
+	sta ptrLo+2
+
+	lda #((base >> 24) & $ff)
+	adc #$00
+	sta ptrLo+3
+	pla
+}
+
+.macro ADD32_IMM(ptrLo, val) {
+	pha
+	clc
+	lda ptrLo
+	adc #<val
+	sta ptrLo
+	lda ptrLo+1
+	adc #>val
+	sta ptrLo+1
+	lda ptrLo+2
+	adc #((val >> 16) & $ff)
+	sta ptrLo+2
+	lda ptrLo+3
+	adc #((val >> 24) & $ff)
+	sta ptrLo+3
+	pla
+}
+
+.macro ADD16_MEM(addr, val) {
+	pha
+	clc
+	lda addr
+	adc #<val
+	sta addr
+
+	lda addr+1
+	adc #>val
+	sta addr+1
+	pla
+}
+
+.macro ADDY_D() {
+	clc
+	lda Y_L
+	adc B_Register
+	sta Y_L
+	lda Y_H
+	adc A_Register
+	sta Y_H
+}
+
+
