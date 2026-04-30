@@ -275,151 +275,159 @@ Consumer pointer → $DA/DB
 * Consumer section*
 ******************/
 
-
-.const zp_cmd_param	= byte_40   // command parameter from queue (what was B on 6809)
-
 loc_807c:
-	
-    // Load X from $DA (pointer) into temp pointer byte_dc/dd
-    lda byte_da        // low
-    sta byte_7		
-    lda byte_db        // high
-    sta byte_8	
+	php					
+	sei					// disable interrupts
+
+	// Load X from $DA (pointer) into temp pointer byte_dc/dd
+	lda byte_da	
+	sta byte_7			// actually read the flag byte
+	lda byte_db
+	sta byte_8
 
 	ldy #0
-    lda (byte_7),y    // actually read the flag byte
-    asl
-    bcs loc_807c
-    and #$7F
-    tax
-	
-	// get low byte
+	lda (byte_7),y		//  derived index into d56a
+	sta A_Register
 	iny
-	lda (byte_7),y    //  derived index into d56a
+	lda (byte_7),y
+	sta B_Register
+
+	lda A_Register
+	asl
+	bcs !busy+
+
+	and #$7f
+	sta tmp
+
+	lda B_Register
 	sta zp_cmd_param
 
-	
-    // A now is the (2 * index) for the jump table later
+	// A now is the (2 * index) for the jump table later
     // -----------------------------
     // Store $FFFF at [byte_da] and advance pointer by 2
     // -----------------------------
-    lda #$FF
-    ldy #0
-    sta (byte_da),y    // low byte = $FF
-    iny
-    sta (byte_da),y    // high byte = $FF
+	lda #$ff
+	ldy #0
+	sta (byte_7),y
+	iny
+	sta (byte_7),y
 
-    // X++ (by 2) and circular wrap 52C0–52FF
-    clc
-    lda byte_da
-    adc #2
-    sta byte_da
-    lda byte_db
-    adc #0
-    sta byte_db
+	// X++ (by 2) and circular wrap 52C0–52FF
+	clc
+	lda byte_da
+	adc #2
+	sta byte_da
+	lda byte_db
+	adc #0
+	sta byte_db
 
 	// ------------------------------------------------------------
 	// Wrap pointer if > $52FF  (6809: CMPX #$52FF / BLS)
 	// ------------------------------------------------------------
 	
 	lda byte_db
-    cmp #>CMD_QUEUE		// 0x52c0
-    bcc pointer_ok        // < $52xx → OK
-    bne do_wrap           // > $52xx → wrap
+	cmp #>CMD_QUEUE			// 0x52c0
+	bcc !ptr_ok+			// < $52xx → OK
+	bne !wrap+				 // > $52xx → wrap
+	
+	// high byte == $52, check low
+	lda byte_da
+	cmp #<CMD_QUEUE+$3f		// c0+$3f = 0xff.
+	bcc !ptr_ok+			// < $52FF → OK
+	beq !ptr_ok+			// == $52FF → OK
 
-    // high byte == $52, check low
-    lda byte_da
-    cmp #<CMD_QUEUE+$3f	// c0+$3f = 0xff.
-    bcc pointer_ok        // < $52FF → OK
-    beq pointer_ok        // == $52FF → OK
+!wrap:
+	lda #<CMD_QUEUE
+	sta byte_da
+	lda #>CMD_QUEUE
+	sta byte_db
 
-do_wrap:
-    lda #<CMD_QUEUE
-    sta byte_da
-    lda #>CMD_QUEUE
-    sta byte_db
-    jmp store_da
-pointer_ok:
-store_da:
-    // pointer already stored in byte_da/db
+!ptr_ok:
+	plp
+
+	// pointer already stored in byte_da/db
 	// X already = 0,2,4,6 from and #$7F / tax
 	
 	// fake return address for RTS -> loc_807c
-    lda #>(loc_807c-1)
-    pha
-    lda #<(loc_807c-1)
-    pha
+	lda #>(loc_807c-1)
+	pha
+	lda #<(loc_807c-1)
+	pha
 
-	lda d562,x              // low byte of handler address
-	sta byte_5
-	lda d562+1,x            // high byte
-	sta byte_6
-	jmp (byte_5)
+	ldx tmp
+	lda d562,x
+	sta byte_25
+	lda d562+1,x
+	sta byte_26
+	jmp (byte_25)
+
+!busy:
+	plp
+	jmp loc_807c
 	
 
 /******************
 * Producer section*
 ******************/
+	
+sub_80a1:
+	lda #$00
+	sta byte_f3
 
-sub_80a1: 
-	lda #$0
-	sta byte_f3      // this is the high byte of D (A)
 loc_80a2:
-	// gets called via interrupt - from loc_8ce0
-    // push X (pshs x)
-    txa
-    pha
+	/* pshs x */
+	pha
+	txa
 
-    // load pointer from byte_d8/byte_d9 into temp ptr
-    lda byte_d8
-    sta byte_f0
-    lda byte_d9
-    sta byte_f1
+	/* ldx $D8 → into temp pointer */
+	lda byte_d8
+	sta byte_f0
+	lda byte_d9
+	sta byte_f1
 
-    // write 16-bit D from byte_f2/byte_f3 to [byte_f0]
-    ldy #0
-    lda byte_f3
-    sta (byte_f0),y
-    iny
-    lda byte_f2
-    sta (byte_f0),y
+	/* std ,x++ */
+	ldy #0
+	lda byte_f3
+	sta (byte_f0),y
+	iny
+	lda byte_f2
+	sta (byte_f0),y
 
-    // advance pointer by 2
-    lda byte_f0
-    clc
-    adc #2
-    sta byte_f0
-    lda byte_f1
-    adc #0
-    sta byte_f1
+	/* x += 2 */
+	clc
+	lda byte_f0
+	adc #2
+	sta byte_f0
+	lda byte_f1
+	adc #0
+	sta byte_f1
 
-    // compare pointer to $5300
-    lda byte_f1
-    cmp #>WORK_RAM1 + $2d0
-    bcc store_ptr        // hi < 53 → keep
-    bne wrap_ptr         // hi > 53 → wrap
-    lda byte_f0
-    cmp #<WORK_RAM1 + $2d0
-    bcc store_ptr        // < 5300 → keep
+	/* cmpx #$5300 */
+	lda byte_f1
+	cmp #>(WORK_RAM1+$2d0)
+	bcc store_ptr
+	bne wrap_ptr
+	lda byte_f0
+	cmp #<(WORK_RAM1+$2d0)
+	bcc store_ptr
 
 wrap_ptr:
-    lda #<(CMD_QUEUE)
-    sta byte_f0
-    lda #>(CMD_QUEUE)
-    sta byte_f1
+	lda #<CMD_QUEUE
+	sta byte_f0
+	lda #>CMD_QUEUE
+	sta byte_f1
 
 store_ptr:
-    // save updated pointer back to byte_d8/byte_d9
-    lda byte_f0
-    sta byte_d8
-    lda byte_f1
-    sta byte_d9
+	lda byte_f0
+	sta byte_d8
+	lda byte_f1
+	sta byte_d9
 
-    // restore X (puls x)
-    pla
-    tax
-    rts
-
+	/* puls x */
+	pla
+	tax
+	rts
+	
 sub_80b5:
     lda #$00
     sta byte_c8        // default: no flip
@@ -985,7 +993,7 @@ sub_85b3: // to do
 .const zp_tile_lo			= byte_2    // pointer into tilemap
 .const zp_tile_hi			= byte_3
 .const zp_script_idx		= byte_4    // index into script (offset from script base)
-.const zp_glyph_index	= byte_6
+.const zp_glyph_index		= byte_6
 
 
 loc_867e:
@@ -1141,14 +1149,13 @@ loc_86e9:
 sub_86f6:
     lda WORK_RAM1+$1D6      // word_5206
     lbne loc_8782			  // draws the game playfield
-    jsr loc_c6a6
-    
-	LDU(e172)
 	
+    jsr loc_c6a6
+	//LDU(e172)
+	LD32_IMM(U_L,PLAYFIELD)
     lda WORK_RAM2+$01       // word_5430+1
     cmp #5
     bcc loc_8710
-
     jsr loc_c6be
     LDU(dbb2)
 
@@ -1177,13 +1184,14 @@ loc_8710:
 	
 	// Set the beginning of playfield.
 	// far right, then set to far left in loc_8782
-	lda #<$59bf
-    sta byte_fd_arc
-    lda #>$59bf
-    sta byte_fe_arc
+	//lda #<$59bf
+    //sta byte_fd_arc
+    //lda #>$59bf
+    //sta byte_fe_arc
+	
+	LDX(ArcadeToMegaTextByte($59bf))
 	
 	jsr TranslateArcadeTextPtrToMega
-
 	// stx $FD
 	lda X_L
 	sta byte_fd
@@ -1211,14 +1219,12 @@ loc_8710:
 	lda #$0b
 	sta B_Register
 	jsr sub_80a1
-
 	
 	//LDX(SCREEN_BASE+(RRB_Tail_words*2*($17f>>arcadeRowSize))+$17f-1)	// $597f - Enemy Name
 	LDX(ArcadeToMegaTextByte($597f))
 
 	// ldu #$D503   // table of word pointers
 	LDU(d503)
-
 	// ldb word_5430+1
 	lda WORK_RAM2+$01
 	sta B_Register
@@ -1249,7 +1255,6 @@ loc_873f_prep:
 	iny
 	lda (byte_5),y
 	sta U_H
-
 loc_8742:
 	// lda ,-u   // predecrement U, then read
 	sec
@@ -1267,7 +1272,7 @@ loc_8742:
 	sbc #$30
 	beq loc_874c
 
-	pha                     // save glyph
+	sta tmp                 // save glyph
 	// move left one visible cell
 	sec
 	lda X_L
@@ -1276,10 +1281,12 @@ loc_8742:
 	lda X_H
 	sbc #0
 	sta X_H
-	pla                     // restore glyph
+	lda tmp                 // restore glyph
 	ldy #0
 	sta (X_L),y
 	bra loc_8742
+	
+	
 
 /**************************
 *Generate player one score*
@@ -1291,6 +1298,8 @@ loc_874c:
 	jsr sub_88c5
 	jsr sub_8922
 	
+	
+	
 /*******************************
 *Generate player one high score*
 *******************************/
@@ -1300,7 +1309,6 @@ loc_8758:
 	LDX(ArcadeToMegaTextByte($58db))
 	jsr sub_88c5
 	jsr sub_8922
-
 
 /*************************************************
 * Initialise energy bar                          *
@@ -1359,7 +1367,7 @@ loc_876a:
     ADDX(2)
     dec B_Register
     bne loc_876a
-
+	
 
 /******************************
 * Prints player two score     *
@@ -1373,110 +1381,134 @@ loc_876f:
 	lda #$0a
 	sta B_Register
 	jsr sub_80a1
-	
 	jsr sub_88bf
 	jsr sub_8922
 	
 loc_877e:
 	inc WORK_RAM1+$1D6 // $5206
 	rts
+	
 
-/******************************
-* Draws the playfield         *
-* From left to right          *
-*******************************/
-
+/***************************************
+* Draw the playfield, left to right    *
+*                                      *
+* Source data now lives in another     *
+* bank and is accessed via a 32-bit    *
+* playfield pointer (PF_*).            *
+*                                      *
+* word_5200 is no longer treated as a  *
+* raw address. It is now a 16-bit      *
+* offset into PLAYFIELD.               *
+***************************************/
 
 loc_8782:
 	/*
-	Initialise high word colour pointers for safety
-	and move this out of scope of the loop since they won't ever hange.
+	Initialise high word colour pointers once.
 	*/
+	
 	lda #$F8
 	sta COLPTR2
 	lda #$0F
 	sta COLPTR3
 
-    dec byte_ca
-    lbne locret_87ce
+	dec byte_ca
+	lbne locret_87ce
 
-    lda #1
-    sta byte_ca
+	lda #$01
+	sta byte_ca
 
-    dec byte_ff
-    lbeq loc_87b2
+	dec byte_ff
+	lbeq loc_87b2
 
-    lda #$17
-    sta B_Register
+	lda #$17
+	sta B_Register
 
-    //----------------------------------------
-    // Load translated screen column pointer
-    //----------------------------------------
-    lda byte_colidx
-    asl
-    tax
+	/*
+	Load translated destination column pointer.
+	*/
+	lda byte_colidx
+	asl
+	tax
 
-    lda PlayfieldColumnPtrs,x
-    sta X_L
-    lda PlayfieldColumnPtrs+1,x
-    sta X_H
+	lda PlayfieldColumnPtrs,x
+	sta X_L
+	lda PlayfieldColumnPtrs+1,x
+	sta X_H
 
-    lda X_L
-    sta byte_fd
-    lda X_H
-    sta byte_fe
+	lda X_L
+	sta byte_fd
+	lda X_H
+	sta byte_fe
 
-    inc byte_colidx
+	inc byte_colidx
 
-    //----------------------------------------
-    // Load source pointer from word_5200
-    //----------------------------------------
-    lda WORK_RAM1+$1D0
-    sta U_L
-    lda WORK_RAM1+$1D1
-    sta U_H
+	/*
+	Build 32-bit source pointer from:
+		PLAYFIELD + word_5200
 
-    // leau 1,u
-    ADDU(1)
+	Original arcade sequence:
+		ldu word_5200
+		leau 1,u
+		stu word_5200
 
-    // stu word_5200
-    lda U_L
-    sta WORK_RAM1+$1D0
-    lda U_H
-    sta WORK_RAM1+$1D1
-
+	So both the live source pointer and the saved
+	16-bit offset must advance by 1 before the loop.
+	*/
+	LD32_BASE_PLUS_16(U_L, PLAYFIELD, WORK_RAM1+$1D0)
+	ADD32_IMM(U_L,1)
+	ADD16_MEM(WORK_RAM1+$1D0, 1)
 
 loc_879e:
-	// lda ,u  -> tile
-	ldy #0
-	lda (U_L),y
+	/*
+	Read tile byte from playfield source.
+	*/
+	ldz #$00
+	lda ((PTR_L)),z
 
-	// sta ,x  -> tile byte
-	ldy #0
+	/*
+	Write tile byte to screen.
+	*/
+	ldy #$00
 	sta (X_L),y
 
-	// lda $2E0,u -> arcade attribute table
+	/*
+	Read corresponding arcade attribute byte from:
+		source + $02E0
+	*/
 	clc
-	lda U_L
-	adc #<$02e0
-	sta byte_5
-	lda U_H
-	adc #>$02e0
-	sta byte_6
-	ldy #0
-	lda (byte_5),y
-	sta tmp // save source attribute byte
+	lda PTR_L
+	adc #<$02E0
+	sta PTR2_L
 
-	// screen attr page bit comes from source attr bit 4 on this table
-	// (flip bits are 6=Y, 7=X on real hardware)
+	lda PTR_H
+	adc #>$02E0
+	sta PTR2_H
+
+	lda PTR_B2
+	adc #$00
+	sta PTR2_B2
+
+	lda PTR_B3
+	adc #$00
+	sta PTR2_B3
+
+	ldz #$00
+	lda ((PTR2_L)),z
+	sta tmp
+
+	/*
+	Screen tile page bit comes from source attribute bit 4.
+	*/
 	and #$10
 	lsr
 	lsr
 	lsr
 	lsr
-	pha  // save tile MSB as bit 0/1
+	sta tmp3
 
-	// set colour ram offset
+	/*
+	Convert destination screen address into colour RAM offset.
+	*/
 	sec
 	lda X_L
 	sbc #<SCREEN_BASE
@@ -1486,111 +1518,127 @@ loc_879e:
 	sbc #>SCREEN_BASE
 	sta COLPTR1
 
-	// Colour RAM byte 0
 	/*
-	MAME source comment is incorrect regarding Flip X/Y bits.
-	------------------------------------------------
-	5000-502f    W  sprite RAM 1 (18 sprites)
-						byte 0 - bit 0 - sprite code MSB
-								 bit 6 - flip X
-								 bit 7 - flip Y
-						byte 1 - Y position
-	------------------------------------------------
-	Actual hardware:
-	bit 6 = Flip Y
-	bit 7 = Flip X
-	*/
+	Colour RAM byte 0
 
+	Arcade hardware:
+		bit 6 = Flip Y
+		bit 7 = Flip X
+
+	MEGA65 colour RAM:
+		bit 7 = Vertical flip
+		bit 6 = Horizontal flip
+	*/
 	lda tmp
-	and #$40        // arcade flip Y
-	asl             // move bit 6 -> bit 7
+	and #$40
+	asl
 	sta tmp2
 
 	lda tmp
-	and #$80        // arcade flip X
-	lsr             // move bit 7 -> bit 6
+	and #$80
+	lsr
 	ora tmp2
 
-	ldz #0
+	ldz #$00
 	sta ((COLPTR0)),z
 
-	pla
-	ora #>TILE_OFFSET  // high byte + tile MSB
+	/*
+	Write tile high byte / page bit.
+	*/
+	lda tmp3
 	
-
-	pha
+	ora #>TILE_OFFSET
+	sta tmp
 	clc
 	lda X_L
-	adc #1
+	adc #$01
 	sta byte_5
 	lda X_H
-	adc #0
+	adc #$00
 	sta byte_6
-	pla
-	ldy #0
+	lda tmp
+
+	ldy #$00
 	sta (byte_5),y
 
-	// next destination row
+	/*
+	Advance destination to next row.
+	*/
 	ADDX(ROW_STRIDE)
-
-	// next source row
-	ADDU($20)
+	/*
+	Advance source to next playfield row.
+	*/
+	ADD32_IMM(U_L,$20)
 
 	dec B_Register
 	lbne loc_879e
 	rts
 
-
 loc_87b2:
-    lda #$20
-    sta byte_fd
-    inc byte_c6
+	lda #$20
+	sta byte_fd
 
-    lda #0
-    sta byte_c7
+	inc byte_c6
 
-    LDX(WORK_RAM2+$0D)      // original #$543D
+	lda #$00
+	sta byte_c7
 
-    // std ,x
-    LDD($328a)
-    STD_PTR(X_L)
+	/*
+	Original #$543D
+	*/
+	LDX(WORK_RAM2+$0D)
 
-    // std 2,x
-    clc
-    lda X_L
-    adc #2
-    sta byte_5
-    lda X_H
-    adc #0
-    sta byte_6
-    LDD($3b8a)
-    STD_PTR(byte_5)
+	/*
+	std ,x
+	*/
+	LDD($328A)
+	STD_PTR(X_L)
 
-    // std 4,x
-    clc
-    lda X_L
-    adc #4
-    sta byte_5
-    lda X_H
-    adc #0
-    sta byte_6
-    LDD($3898)
-    STD_PTR(byte_5)
+	/*
+	std 2,x
+	*/
+	clc
+	lda X_L
+	adc #$02
+	sta byte_5
+	lda X_H
+	adc #$00
+	sta byte_6
+	LDD($3B8A)
+	STD_PTR(byte_5)
 
-    // clr -1,x
-    sec
-    lda X_L
-    sbc #1
-    sta byte_5
-    lda X_H
-    sbc #0
-    sta byte_6
-    ldy #0
-    lda #0
-    sta (byte_5),y
+	/*
+	std 4,x
+	*/
+	clc
+	lda X_L
+	adc #$04
+	sta byte_5
+	lda X_H
+	adc #$00
+	sta byte_6
+	LDD($3898)
+	STD_PTR(byte_5)
+
+	/*
+	clr -1,x
+	*/
+	sec
+	lda X_L
+	sbc #$01
+	sta byte_5
+	lda X_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda #$00
+	sta (byte_5),y
 
 locret_87ce:
-    rts
+	rts
+
+
 	
 /*****************
 *Splash Screen   *
@@ -1787,7 +1835,7 @@ TextDone:
    
      
 	
-loc_8808: // seems to get called when you press start
+loc_8808: // called when you press start
 	jmp *
 
 loc_8824:	// to do - gets called during demo.
@@ -1960,10 +2008,7 @@ locret_892c:
 
 loc_892d:
 	// ldd #$1009
-	lda #$10              // blank tile
-	sta A_Register
-	lda #$09              // count
-	sta B_Register
+	LDD($1009)
 	jsr loc_8967
 
 	lda WORK_RAM2+$30     // word_5460
@@ -1980,17 +2025,14 @@ loc_892d:
 	sta B_Register
 
 loc_8940:
-	jsr loc_8965
+	jsr loc_8965			// prints lives
 
 loc_8942:
 	lda WORK_RAM1+$1B0    // word_51E0
 	beq locret_892c
 
 	// ldd #$1009
-	lda #$10              // blank tile
-	sta A_Register
-	lda #$09              // count
-	sta B_Register
+	LDD($1009)				// blank tile and count
 	jsr loc_8972
 
 	lda WORK_RAM2+$60     // word_5490
@@ -2007,7 +2049,7 @@ loc_8942:
 	sta B_Register
 
 loc_895a:
-	jmp loc_8970
+	bra loc_8970
 
 
 sub_895c:
@@ -2018,43 +2060,51 @@ sub_895c:
 	lda WORK_RAM1+$1B1    // word_51E0+1
 	bne loc_8970
 
+
+/*
+	Display Player 1 lives 
+*/
+
 loc_8965:
-	lda #$10              // blank tile, not ASCII '0'
-
+	lda #$30
+	sta A_Register			/* life glyph */
 loc_8967:
-	//LDX(SCREEN_BASE+(RRB_Tail_words*2*($103>>arcadeRowSize))+$103-1)   // original $5903
 	LDX(ArcadeToMegaTextByte($5903))
-
 loc_896a:
+	ldy #$00
 	lda A_Register
-	ldy #0
-	sta (X_L),y           // write tile byte
-	ADDX(2)               // next visible cell
-	dec B_Register
-	bne loc_896a
+	sta (X_L),y
+	ADDX(2)
+	DEC_B()
+	BNE(loc_896a)
 	rts
 
+/*
+	Display Player 2 lives 
+*/
 
 loc_8970:
-	lda #$10              // blank tile
+	lda #$30
+	sta A_Register              /* life glyph */
 
 loc_8972:
-	//LDX(SCREEN_BASE+(RRB_Tail_words*2*($13d>>arcadeRowSize))+$13d-1)   // original $593D
 	LDX(ArcadeToMegaTextByte($593d))
 
 loc_8975:
-	ldy #0
-	sta (X_L),y           // write tile byte
+	ldy #$00
+	lda A_Register
+	sta (X_L),y
+
 	sec
 	lda X_L
-	sbc #2                // previous visible cell
+	sbc #$02
 	sta X_L
 	lda X_H
-	sbc #0
+	sbc #$00
 	sta X_H
 
-	dec B_Register
-	bne loc_8975
+	DEC_B()
+	BNE(loc_8975)
 	rts
 
 
@@ -2185,7 +2235,7 @@ loc_8a00:
     lda byte_c1
     and #$f7            // clear bit 3
     sta byte_c1
-    jmp loc_8a20
+    bra loc_8a20
 	
 loc_8a12:
     lda byte_e4
@@ -2216,55 +2266,78 @@ loc_8a25:
     lda byte_c1
     and #$ef            // clear bit 4
     sta byte_c1
-    jmp loc_8a45
+    bra loc_8a45
 	
 
 loc_8a37:
-    lda byte_e9
-    beq loc_8a4a        // if E9 == 0, skip
+	lda byte_e9
+	beq loc_8a4a
 
-    dec byte_e9          // E9--
+	dec byte_e9
 
-    lda #8
-    sta byte_eb          // EB = 8
+	/* ldb #8 */
+	lda #$08
+	sta B_Register
 
-    lda byte_c1
-    eor #$10            // toggle bit 4
-    sta byte_c1
+	/* stb $eb */
+	sta byte_eb
+
+	lda byte_c1
+	eor #$10
 
 loc_8a45:
 	sta byte_c1
-    sta byte_4000_shadow
+	sta byte_4000_shadow
 	
 
 loc_8a4a:
-    lda byte_f1
-    ora byte_f6
-    eor #$ff          // comb = one’s complement
-    and byte_fb
-    and byte_fc
-    and #7
-    lbeq loc_8b0e
+	/* B = $F1 | $F6 */
+	lda byte_f1
+	ora byte_f6
+	sta B_Register
 
-    // pshs a,b  → push A then B
-    pha
-    lda byte_b         // however we store B-equivalent
-    pha
+	/* comb */
+	eor #$ff
+	sta B_Register
 
-    lda byte_c3
-    cmp #2
-    beq loc_8a66
+	/* andb $FB */
+	lda B_Register
+	and byte_fb
+	sta B_Register
 
-    lda #$0f
-    sta byte_b        // B = $0F
-    jsr sub_80a1
+	/* andb $FC */
+	lda B_Register
+	and byte_fc
+	sta B_Register
 
+	/* andb #7 */
+	lda B_Register
+	and #$07
+	sta B_Register
+	lbeq loc_8b0e
 
-loc_8a66:   
-    pla                 // pull A
-    sta byte_a         // store temporarily if needed
-    pla                 // pull B
-    sta byte_b
+	/* pshs a,b */
+	lda A_Register
+	pha
+	lda B_Register
+	pha
+
+	/* lda $C3 */
+	lda byte_c3
+	cmp #$02
+	beq loc_8a66
+
+	/* ldb #$0F */
+	lda #$0f
+	sta B_Register
+	jsr sub_80a1
+
+loc_8a66:
+	/* puls b,a */
+	pla
+	sta B_Register
+	pla
+	sta A_Register
 
     lda byte_c2
     cmp #$90
@@ -2459,9 +2532,8 @@ loc_8af3:
     // jsr sub_814c
     jsr sub_814c
 
-    // bra loc_8b0e
-    jmp loc_8b0e
-
+    bra loc_8b0e
+    
 loc_8b02:
     // cmpa #2
     cmp #2
@@ -2606,13 +2678,7 @@ loc_8b3c:
     // INC
     clc
     adc #1
-    jmp loc_8b60
-	
-	/* workaround for last sprite offset adjust in the title
-loc_8b5f_:
-	clc
-	adc #1
-	jmp loc_8b60 */
+    bra loc_8b60
 	
 loc_8b5f:
     sec
@@ -2673,9 +2739,7 @@ loc_8b78:
 
     // incb
     inc B_Register
-
-    // bra loc_8B3C
-    jmp loc_8b3c
+    lbra loc_8b3c
 
 locret_8b89:
     rts
@@ -2730,7 +2794,7 @@ loc_8b8a:
     // INC
     clc
     adc #1
-    jmp loc_8bb3
+    bra loc_8bb3
 
 loc_8bb2:
     // DEC
@@ -2821,8 +2885,7 @@ loc_8bcb:
     // incb
     inc B_Register
 
-    // bra loc_8B8A
-    jmp loc_8b8a
+    lbra loc_8b8a
 
 locret_8bdc:
     rts
@@ -3100,8 +3163,6 @@ loc_8c83:
 loc_8ca2:
     jmp loc_8de2
 	
-
-
 // clear tile bits for Konami logo + copyright
 
 sub_8ca5:
@@ -3168,7 +3229,7 @@ loc_8cbd:
     sta (tmpPtrLo),y
 
     // Xpos at sprPtr + 4
-    ldy #1                  // second byte in DA5A entry
+    ldy #1   // second byte in DA5A entry
     clc
     lda sprPtrLo
     adc #4
@@ -3372,17 +3433,20 @@ locret_8dc6:
     rts
 	
 sub_8dc7:
-    LDX(WORK_RAM2) 		// $5430
+	LDX(WORK_RAM2)          /* $5430 */
+	LDD($0000)
 loc_8dcd:
-    STD_ZERO_POSTINC_X()
-    CMPX(WORK_RAM2+$8d)	// $54bd
-    BCS(loc_8dcd)
+	STD_ZERO_POSTINC_X()
+	CMPX(WORK_RAM2+$8d)     /* $54bd */
+	BCS(loc_8dcd)
+
 loc_8dd4:
-    LDX(WORK_RAM2+$90)		// $54c0
+	LDX(WORK_RAM2+$90)      /* $54c0 */
+	LDD($0000)
 loc_8dda:
-    STD_ZERO_POSTINC_X()
-    CMPX(WORK_RAM2+$ed)	// $551d
-    BCS(loc_8dda)
+	STD_ZERO_POSTINC_X()
+	CMPX(WORK_RAM2+$ed)     /* $551d */
+	BCS(loc_8dda)
     rts
 	
 /*****************************
@@ -3521,10 +3585,6 @@ loc_8e58: // code is active when game has started - stage 1
     bne locret_8e57
     inc byte_c7
 
-    lda #0
-    sta WORK_RAM1+$1D6      // word_5206 low
-    jmp loc_a7db
-
 loc_8e60:
     lda #0
     sta WORK_RAM1+$1D6      // word_5206
@@ -3532,8 +3592,10 @@ loc_8e60:
 
 loc_8e66:
     jsr sub_86f6
-    lda #0
-    sta WORK_RAM2+$09       // word_5439 low
+	lda #$0
+	sta A_Register
+    sta B_Register
+	sta WORK_RAM2+$09       // word_5439 low
     sta WORK_RAM2+$0A       // word_5439 high
     rts
 	
@@ -3587,25 +3649,25 @@ locret_8e7c:
 * Game Play Loop *
 ******************/
 loc_8e7d:
-	
+
 	LDX(WORK_RAM2 + $7)		// $5437
 	jsr sub_8e6f
-
 	ADDX(2)
 	jsr sub_8e6f
 
 	lda byte_f0
 	and #$02
 	bne loc_8e92
-
+	
 	lda byte_ef
 	and #$04
 	bne loc_8ea2
+	
 
 loc_8e92:
 	lda byte_e0
 	beq loc_8ea2
-
+	
 	lda byte_e1
 	beq loc_8ea2
 
@@ -3615,17 +3677,70 @@ loc_8e92:
 	lda FB_H       // $F8
 	sta FB_L       // $F7
 	
-loc_8ea2:  // to do - part of game play loop
-		
-
-	//bsr.w	sub_9EA5					// draws energy bars.
-	// lots to do here.
-
+loc_8ea2:  
 	jsr sub_923f		// Check status for waterfall
 	jsr sub_9084		// 1UP flasher 0x8b=blank, B=1UP
-	jsr sub_9315		// Game vars and set up, inits sprite positions in the game/attract. ( 9315 -> 9415 )
-	jsr sub_a86d		// Sprite routines
-	jsr	sub_9ea5		// Draws energy bars
+	jsr sub_9315		// Game vars and set up, inits sprite positions in the game/attract. ( 5315 -> 5415 )
+	//jsr sub_a86d	// Sprite routines [27/04/2025]
+	jsr sub_9ea5		// Draws energy bars
+	
+	
+	/* ldd word_5439 */
+	lda WORK_RAM2+$09          /* word_5439 */
+	sta A_Register
+	lda WORK_RAM2+$0a          /* word_5439+1 */
+	sta B_Register
+
+	/* cmpa #$3c */
+	lda A_Register
+	cmp #$3c
+	bcc loc_8ec9
+
+	/* tstb */
+	lda B_Register
+	bne loc_8ec9
+	
+	jsr sub_a737
+	jsr loc_c696
+	jsr loc_c6b2
+	
+	lda #$23
+	sta B_Register
+	jsr sub_80a1
+	
+loc_8ec9:
+	lda WORK_RAM2+$05          /* word_5435 */
+	sec
+	sbc #$01
+	beq loc_8ed7
+
+	lda WORK_RAM2+$06          /* word_5435+1 */
+	sec
+	sbc #$01
+	lbne locret_8e7c
+	bra loc_8ee2
+
+
+loc_8ed7:
+	lda #$00
+	sta WORK_RAM2+$05          /* word_5435 */
+	sta WORK_RAM2+$06          /* word_5435+1 */
+
+	dec WORK_RAM2+$00          /* word_5430 */
+	inc byte_c6
+
+loc_8ee2:
+	inc byte_c6
+
+	lda #$00
+	sta WORK_RAM1+$1d6         /* word_5206 */
+
+	lda WORK_RAM1+$5c          /* word_508c */
+	cmp #$08
+	bne loc_8ef3
+
+	lda #$01
+	sta WORK_RAM2+$0b          /* word_543b */
 			
 loc_8ef3:
 	lbra loc_8f5b
@@ -3640,7 +3755,33 @@ loc_8ef5:
 	sta byte_6
 	jmp (byte_5)
 	
+sub_8efe:
+	lda byte_e0
+	beq loc_8f0c
+
+	lda #$08
+	sta B_Register
+
+	lda byte_e1
+	bne loc_8f09
+
+	/* decb */
+	lda B_Register
+	sec
+	sbc #$01
+	sta B_Register
+
+loc_8f09:
+	jsr sub_80a1
+
+loc_8f0c:
+	lda #$09
+	sta B_Register
+	jsr sub_80a1
+	jmp loc_c6b6
+	
 loc_8f14: // to do
+	jmp *
 
 loc_8f86:
 	dec byte_fd
@@ -3716,7 +3857,7 @@ loc_8fc6:
 	jsr loc_c692
 
 loc_8fd7:
-    LDU($5050)
+    LDU(WORK_RAM1+$20)					  // $5050
     jsr sub_a663
 
     // ldd word_508C
@@ -3746,7 +3887,6 @@ loc_8fe7:
     sta WORK_RAM1+$5C
     lda B_Register
     sta WORK_RAM1+$5D
-    // beq loc_8ff0
     lda A_Register
     ora B_Register
     beq loc_8ff0
@@ -3816,38 +3956,29 @@ loc_9090:
 
 
 loc_9098:
-	// pshs b
-	pha
+	/* pshs b */
 	lda B_Register
 	pha
 
-	// lda $E1
 	lda byte_e1
 	beq loc_909f
 
-	// decb
 	dec B_Register
 
 loc_909f:
-	// jsr sub_80A1
 	jsr sub_80a1
 
-	// puls b
+	/* puls b */
 	pla
 	sta B_Register
-	pla
 
-	// eorb #$82
 	lda B_Register
 	eor #$82
 	sta B_Register
 
-	// lda $E2
 	lda byte_e2
-
-	// lbeq sub_80A1
 	bne locret_90ac
-	jsr sub_80a1
+	lbra sub_80a1
 
 locret_90ac:
 	rts
@@ -3878,10 +4009,10 @@ loc_90b4:
     bcc loc_90ce
     inc B_Register
 
-loc_90ce:
+loc_90ce: // to do
 	jmp *
 
-loc_919e:
+loc_919e: // to do
 	jmp *
 
 /*****************************
@@ -3890,11 +4021,6 @@ loc_919e:
 
 locret_923e:
 	rts
-
-loc_926d:
-	jmp *
-loc_9285:
-	jmp *
 
 
 sub_923f:
@@ -3976,29 +4102,107 @@ loc_925d_store:
 	sta (U_L),y
 
 	// bra loc_929B
-	jmp loc_929b
+	bra loc_929b
+	
+loc_926d:
+	lda #$e2
+	ldy #$0e
+	sta (U_L),y
+
+	/* ldd word_543f */
+	lda WORK_RAM2+$0f          /* word_543f */
+	sta A_Register
+	lda WORK_RAM2+$10          /* word_543f+1 */
+	sta B_Register
+
+	/* sta 4,u */
+	ldy #$04
+	lda A_Register
+	sta (U_L),y
+
+	/* stb 6,u */
+	ldy #$06
+	lda B_Register
+	sta (U_L),y
+
+	/* subb #6 */
+	lda B_Register
+	sec
+	sbc #$06
+	sta B_Register
+
+	/* cmpb #$70 / bhi loc_9280 */
+	cmp #$70
+	beq loc_9280
+	bcs loc_9280
+
+	lda #$8a
+	sta B_Register
+
+loc_9280:
+	/* std word_543f */
+	lda A_Register
+	sta WORK_RAM2+$0f
+	lda B_Register
+	sta WORK_RAM2+$10
+
+	bra loc_929b
+
+
+loc_9285:
+	lda #$e3
+	ldy #$0e
+	sta (U_L),y
+
+	/* ldd word_5441 */
+	lda WORK_RAM2+$11          /* word_5441 */
+	sta A_Register
+	lda WORK_RAM2+$12          /* word_5441+1 */
+	sta B_Register
+
+	/* sta 4,u */
+	ldy #$04
+	lda A_Register
+	sta (U_L),y
+
+	/* stb 6,u */
+	ldy #$06
+	lda B_Register
+	sta (U_L),y
+
+	/* subb #6 */
+	lda B_Register
+	sec
+	sbc #$06
+	sta B_Register
+
+	/* cmpb #$70 */
+	cmp #$70
+	bcc loc_9298
+
+	lda #$8a
+	sta B_Register
+
+loc_9298:
+	/* std word_5441 */
+	lda A_Register
+	sta WORK_RAM2+$11          /* word_5441 */
+	lda B_Register
+	sta WORK_RAM2+$12          /* word_5441+1 */
 
 loc_929b:
-	// lda #$40
 	lda #$40
-
-	// sta $0F,u
 	ldy #$0f
 	sta (U_L),y
 
-	// inc word_543B+1
-	inc WORK_RAM2 + $0c        // $543C
+	inc WORK_RAM2+$0c          /* word_543b+1 */
 
-	// lda word_543B+1
-	lda WORK_RAM2 + $0c
-
-	// cmpa #3 / bcs locret_92ac
+	lda WORK_RAM2+$0c          /* word_543b+1 */
 	cmp #$03
 	bcc locret_92ac
 
-	// clr word_543B+1
 	lda #$00
-	sta WORK_RAM2 + $0c
+	sta WORK_RAM2+$0c          /* word_543b+1 */
 
 locret_92ac:
 	rts
@@ -4202,8 +4406,7 @@ loc_932d:
 
 	// cmpa #3
 	cmp #$03
-	bcs loc_9352
-	jmp loc_9386
+	bcs loc_9386
 
 loc_9352:
 	// ldb WORK_RAM2 + $92+1
@@ -4214,7 +4417,7 @@ loc_9352:
 	// deca
 	dec
 	beq loc_9383
-	bne loc_9360
+	bra loc_9360
 
 loc_935c:
 	// cmpa #2
@@ -4356,8 +4559,9 @@ sub_9395:
 	beq loc_93c9
 
 	// tfr a,b
-	lda A_Register
-	sta B_Register
+	sta A_Register
+	TFR_A_B()	     // tfr a,b
+
 
 	// andb #$FC
 	lda B_Register
@@ -4390,8 +4594,7 @@ loc_93c9:
 
 	// lda WORK_RAM1 + $1c7
 	lda WORK_RAM1 + $1c7
-	ldy #$fd                 // -3,u
-	sta (U_L),y
+	STA_U_NEG($03)	// -3,u
 
 loc_93dd:
 	// lda ,x
@@ -4464,25 +4667,38 @@ loc_9415:
 	sta (U_L),y
 
 	// clra
-	lda #$00
-
 	// jsr sub_9E1F
 	CLRA()
+	
+	/* preserve original Y=e7fc across sub_9e1f */
+	lda byte_5
+	pha
+	lda byte_6
+	pha
+
+	
 	jsr sub_9e1f		
+	
+	/* restore original Y=e7fc */
+	pla
+	sta byte_6
+	pla
+	sta byte_5
+
 
 	// lda #4
 	lda #$04
-
 	// sta $A,u
 	ldy #$0a
 	sta (U_L),y
 
-	// sty ,u
-	lda byte_5
+	/* arcade: sty ,u */
+	/* store original frame pointer table address */
 	ldy #$00
+	lda byte_5
 	sta (U_L),y
-	lda byte_6
 	iny
+	lda byte_6
 	sta (U_L),y
 
 	// lda #1
@@ -4504,7 +4720,7 @@ loc_9415:
 	sta (U_L),y
 
 	// clra
-	lda #$00
+	CLRA()
 
 	// jsr sub_9979
 	jsr sub_9979
@@ -4599,26 +4815,31 @@ sub_9979:
 	bcs loc_9986		// Upforward Punch attack
 
 	// ldb #$F0
+	
+	pha
 	lda #$f0
 	sta B_Register
-
-	// stb $0B,u
 	ldy #$0b
 	sta (U_L),y
+	pla
 
 loc_9986:
-	// ldb word_54CE
-	lda WORK_RAM2 + $9e
+	/* ldb word_54CE -- preserve A */
+	pha
+	lda WORK_RAM2+$9e
 	sta B_Register
+	pla
+
+	lda B_Register
 	beq loc_998f
 
-	// cmpa #8
+	/* cmpa #8 -- compare original A */
 	cmp #$08
 	bcc locret_9978
 
 loc_998f:
-	// sta word_5069
-	sta WORK_RAM1 + $39
+	/* sta word_5069 -- original A */
+	sta WORK_RAM1+$39
 
 sub_9992:
 	// ldu #$5050
@@ -4638,8 +4859,8 @@ sub_9992:
 	lbne loc_99f6
 
 	// ldb -$10,u
-	ldy #$f0
-	lda (U_L),y
+	LDB_U_NEG($10)
+    lda B_Register
 	sta B_Register
 	cmp #$01
 	lbne loc_99f6
@@ -4659,18 +4880,15 @@ sub_9992:
 	lda #$02
 
 	// sta -$10,u
-	ldy #$f0
-	sta (U_L),y
+	STA_U_NEG($10)
 
 	// clr $11,u
 	ldy #$11
 	lda #$00
 	sta (U_L),y
 
-	// lda $FFE0,u
-	ldy #$e0
-	lda (U_L),y
-
+	LDA_U_NEG($20) 				// lda -$20,u
+	lda A_Register
 	// cmpa #$10
 	cmp #$10
 	bcc loc_99bf
@@ -4694,16 +4912,11 @@ loc_99bf:
 	
 loc_99cb:
 	// inc $11,u
-	ldy #$11
-	lda (U_L),y
-	clc
-	adc #$01
-	sta (U_L),y
-
+	INC_U($11)
+	
 loc_99ce:
 	// ldb -$0F,u
-	ldy #$f1
-	lda (U_L),y
+	LDB_U_NEG($0f)
 	sta B_Register
 
 	// clra
@@ -4745,7 +4958,6 @@ loc_99ce:
 	lda X_H
 	sta byte_6
 
-	// jsr sub_9953
 	jsr sub_9953
 
 	// nega
@@ -4774,11 +4986,7 @@ loc_99ce:
 	lda B_Register
 	jsr sub_996d
 
-	// clr $FFE2,u
-	ldy #$e2
-	lda #$00
-	sta (U_L),y
-
+	CLR_U_NEG($1e) // clr -$1e,u
 	// puls a
 	pla
 	
@@ -4791,13 +4999,14 @@ loc_99ee:
 	sec
 	sbc #$08
 
-	// bra loc_99ee
-	jmp loc_99ee
+	bra loc_99ee
+
 
 loc_99f6:
 	// sta $35,u
 	ldy #$35
 	sta (U_L),y
+	sta tmp	// preserve our index into table
 
 	// ldu #$5050
 	lda #<WORK_RAM1 + $20
@@ -4810,36 +5019,37 @@ loc_99f6:
 	bcs loc_9a02
 
 	// inc -3,u
-	ldy #$fd
-	lda (U_L),y
-	clc
-	adc #$01
-	sta (U_L),y
+	INC_U_NEG($03)
 
 loc_9a02:
+
 	// ldy #$E7C0
 	lda #<e7c0
 	sta byte_5
 	lda #>e7c0
 	sta byte_6
-
 	// ldx #$E7FC
 	LDX(e7fc) // Player sprite frames
+	lda tmp   // restore index into table
 
-	// asla
+
+	/* asla */
 	asl
+	sta tmp                 /* save doubled frame index */
 
-	// leay a,y
+	/* leay a,y */
 	clc
-	adc byte_5
+	lda byte_5
+	adc tmp
 	sta byte_5
 	lda byte_6
 	adc #$00
 	sta byte_6
 
-	// leax a,x
+	/* leax a,x */
 	clc
-	adc X_L
+	lda X_L
+	adc tmp
 	sta X_L
 	lda X_H
 	adc #$00
@@ -4864,7 +5074,7 @@ loc_9a02:
 	// lda $23,u
 	ldy #$23
 	lda (U_L),y
-	bne loc_9a46
+	lbne loc_9a46
 
 	// ldd word_54C4
 	lda WORK_RAM2 + $94
@@ -4887,12 +5097,12 @@ loc_9a02:
 	// lda $C,u
 	ldy #$0c
 	lda (U_L),y
-	bne loc_9a46
+	lbne loc_9a46
 	
 loc_9a2c:
 	// lda -$10,u
-	ldy #$f0
-	lda (U_L),y
+	LDA_U_NEG($10)
+	lda A_Register
 
 	// cmpa #2
 	cmp #$02
@@ -4917,21 +5127,16 @@ loc_9a2c:
 	// cmpa #2
 	cmp #$02
 	bcs loc_9a42
-	jmp loc_9a3c
+	bra loc_9a3c
 
 loc_9a3a:
 	// clr -$10,u
-	ldy #$f0
-	lda #$00
-	sta (U_L),y
-
+	CLR_U_NEG($10)
 loc_9a3c:
 	// ldb #$80
 	lda #$80
 	sta B_Register
-
-	// bra loc_9a44
-	jmp loc_9a44
+	bra loc_9a44
 
 loc_9a42:
 	// ldb ,y
@@ -4967,10 +5172,9 @@ loc_9a46:
 
 	// clra
 	lda #$00
-
+	sta A_Register
 	// jsr sub_9C19
 	jsr sub_9c19
-
 	rts
 
 sub_9bbc:
@@ -4979,7 +5183,8 @@ sub_9bbc:
 
 	// clra
 	lda #$00
-
+	sta A_Register
+	
 	// leax a,x
 	clc
 	adc X_L
@@ -5020,7 +5225,7 @@ sub_9bbc:
 	and #$fc
 	ora #$02
 	sta A_Register
-	jmp loc_9bdf
+	bra loc_9bdf
 
 loc_9bdb:
 	// anda #$FC
@@ -5055,7 +5260,7 @@ loc_9bdf:
 	and #$30
 	ora #$01
 	sta A_Register
-	jmp locret_9bf9
+	bra locret_9bf9
 
 loc_9bf5:
 	// anda #$30
@@ -5133,9 +5338,8 @@ sub_9c19:
 	sta B_Register
 	beq loc_9c42
 
-	ldy #$f1
-	lda (U_L),y
-	sta B_Register
+	LDB_U_NEG($0f)
+	
 	cmp #$09
 	bcs loc_9c3d
 
@@ -5388,6 +5592,11 @@ loc_9cb2:
 	lda U_H
 	sta Y_H
 
+/*
+
+Write player sprite frames to sprite ram
+
+*/
 loc_9ccc:
 	ldy #$00
 	lda (X_L),y
@@ -5408,7 +5617,7 @@ loc_9ccc:
 
 loc_9cda:
 	BR_IF_U_NE(WORK_RAM1+$20, locret_9ce3)
-	stz WORK_RAM1+$1c
+	sta WORK_RAM1+$1c
 locret_9ce3:
     rts
 
@@ -5420,6 +5629,9 @@ loc_9ce4:
 
 	
 sub_9cf0: // to do
+	jmp *
+	
+loc_9d13: // to do
 	jmp *
 	
 	
@@ -5439,22 +5651,20 @@ sub_9d4d:
 
 loc_9d5c:
 	BR_IF_U_NE(WORK_RAM1+$20, loc_9d66)
-
-	ldy #$f8              // -8,u
-	lda (U_L),y
+	LDA_U_NEG($8)	// lda     -8,u
 	lbne loc_9ddc
+	
 
 loc_9d66:
 	ldy #$05
-	lda (U_L),y
-	sta B_Register
+	lda (U_L),y          /* ldb 5,u */
 
 	ldy #$08
 	clc
-	adc (U_L),y
+	adc (U_L),y          /* addb 8,u */
+	sta (U_L),y          /* stb 8,u */
 	sta B_Register
-	sta (U_L),y
-	bcc loc_9d79
+	bcc loc_9d79         /* same as 6809: branch if no carry */
 
 	ldy #$11
 	lda (U_L),y
@@ -5679,7 +5889,7 @@ loc_9e1d:
     sta A_Register
 
 sub_9e1f:
-	TFR_A_B()
+	TFR_A_B()	               // tfr a,b
 
 	// count = E9C3[original_a]
 	lda B_Register
@@ -5782,21 +5992,563 @@ loc_9ec8:
 	lda #>WORK_RAM1+$20
 	sta U_H
 
-	lda #$00
-	ldy #$f2              // -$0e,u
-	sta (U_L),y
+	CLR_U_NEG($0e)			// -$0e,u
 
 	lda WORK_RAM2+$94      // word_54c4
 	bne loc_9ed7
 
-	lda #$00
-	ldy #$f5              // -$0b,u
-	sta (U_L),y
-	
+	CLR_U_NEG($0b)			// -$0b,u
+
 
 loc_9ed7:
-	jsr sub_a668
-	jmp * // PC is here.
+	jsr sub_a668 			//  energy bars.
+	lda WORK_RAM2+$95      // word_54c4+1
+	bne loc_9ee2
+	CLR_Y($29)				// $29,y
+	
+	
+loc_9ee2:
+	lda WORK_RAM2+$98      // word_54c8
+	beq loc_9eff
+
+	lda WORK_RAM2+$01      // word_5430+1
+	sta B_Register
+	cmp ea1c+1
+	bne loc_9ef7
+
+	lda WORK_RAM2+$98      // word_54c8
+	cmp #$10
+	BCS(loc_a1eb)
+	bra loc_9f0b
+	
+loc_9ef7:
+    cmp #$40
+    BCS(loc_a1eb)
+    bra loc_9f0b
+
+
+loc_9eff:
+    LDX(WORK_RAM1)
+    jsr sub_a21a
+
+    ADDX($0010)
+    jsr sub_a21a
+
+loc_9f0b:
+	lda #$00
+	sta WORK_RAM2+$98      // word_54c8
+
+	ldy #$29
+	lda (U_L),y
+	lbne locret_a1c9
+
+	lda WORK_RAM2+$01      // word_5430+1
+	tay
+	LDX(f2f5+2)
+	lda (X_L),y
+
+	ldy #$37
+	sta (U_L),y
+
+	lda #<WORK_RAM1+$20    // $5050
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	lda WORK_RAM2+$95      // word_54c4+1
+	lbeq loc_9fdc
+
+	lda WORK_RAM2+$98      // word_54c8
+	lbne loc_9fe2
+
+	ldy #$35
+	lda (U_L),y
+	cmp #$0c
+	lbeq loc_9f45
+
+	cmp #$14
+	lbeq loc_9f45
+
+	ldy #$32
+	lda (U_L),y
+	cmp #$05
+	BCC(loc_9fdc)
+	
+loc_9f45:
+	ldy #$0c
+	lda (U_L),y
+	lbne loc_9fdc
+
+	lda WORK_RAM2+$94      /* word_54c4 */
+	bne loc_9f56
+
+	LDA_U_NEG($10)         /* -$10,u */
+	lbeq loc_9fdc
+	
+loc_9f56:
+	/* ldu word_54e4 */
+	lda WORK_RAM2+$b4
+	sta U_L
+	lda WORK_RAM2+$b5
+	sta U_H
+
+	ldy #$2b
+	lda (U_L),y
+	sta B_Register
+
+	/* ldu #$5050 */
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	ldy #$25
+	lda B_Register
+	sta (U_L),y
+
+	ldy #$2b
+	lda (U_L),y
+	sta B_Register
+
+	ldy #$eb              /* $ffeb,u */
+	lda B_Register
+	sta (U_L),y
+
+	ldy #$35
+	lda (U_L),y
+	sta B_Register
+
+	lda B_Register
+	sec
+	sbc #$09
+	sta B_Register
+	BCS(loc_9fdc)
+
+	jsr sub_a22b
+
+	lda WORK_RAM2+$e5     /* word_5515 */
+	sta B_Register
+
+	LDY(ea9d)
+
+	CLRA()
+	ASLB()
+
+	/* ldy d,y */
+	clc
+	lda Y_L
+	adc B_Register
+	sta tmp
+	lda Y_H
+	adc A_Register
+	sta tmp+1
+
+	ldy #$00
+	lda (tmp),y
+	sta Y_L
+	iny
+	lda (tmp),y
+	sta Y_H
+
+	lda #$0a
+	sta A_Register
+
+	/* pshs x */
+	lda X_L
+	pha
+	lda X_H
+	pha
+
+	/* ldx word_54e4 */
+	lda WORK_RAM2+$b4
+	sta X_L
+	lda WORK_RAM2+$b5
+	sta X_H
+
+	ldy #$0c
+	lda (X_L),y
+	sta B_Register
+	beq !skip_puls_x+
+
+	/* puls x */
+	pla
+	sta X_H
+	pla
+	sta X_L
+
+!skip_puls_x:
+	MUL()
+
+	clc
+	lda Y_L
+	adc B_Register
+	sta Y_L
+	lda Y_H
+	adc A_Register
+	sta Y_H
+
+	lda #$00
+	STA_U_NEG($07)	/* -7,u */
+
+	jsr sub_a2f2
+	cmp #$01
+	lbne loc_9fe2
+
+	LDY(WORK_RAM1)	// $5030
+
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	lda WORK_RAM2+$01     /* word_5430+1 */
+	sta B_Register
+	cmp ea1c+1
+	bne loc_9fb2
+
+	/* pshs u */
+	lda U_L
+	pha
+	lda U_H
+	pha
+
+	lda #$01
+	sta B_Register
+
+	/* ldu word_54e4 */
+	lda WORK_RAM2+$b4
+	sta U_L
+	lda WORK_RAM2+$b5
+	sta U_H
+
+	ldy #$30
+	lda B_Register
+	sta (U_L),y
+
+	/* puls u */
+	pla
+	sta U_H
+	pla
+	sta U_L
+	
+loc_9fb2:
+	lda #$01
+	sta B_Register
+
+	lda B_Register
+	sta WORK_RAM1+$19      /* word_5049 */
+
+	ldy #$2b
+	lda (U_L),y
+	sta B_Register
+
+	jsr sub_a598
+
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	INC_U($29)
+
+	lda #$00
+	sta WORK_RAM2+$e6      /* word_5515+1 */
+
+	inc WORK_RAM2+$98      /* word_54c8 */
+
+	ldy #$3a
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+
+	sec
+	lda B_Register
+	sbc #$00
+	sta B_Register
+	lda A_Register
+	sbc #$01
+	sta A_Register
+
+	ldy #$3a
+	lda A_Register
+	sta (U_L),y
+	iny
+	lda B_Register
+	sta (U_L),y
+	BCC(loc_9fe2)
+
+	lda #$00
+	ldy #$3a
+	sta (U_L),y
+	iny
+	sta (U_L),y
+
+	bra loc_9fe2
+	
+loc_9fdc:
+	LDX(WORK_RAM1)
+	jsr sub_a21a
+	
+loc_9fe2:
+	jsr sub_a238
+	lda WORK_RAM2+$06      // word_5435+1
+	lbne loc_a08b
+
+	lda WORK_RAM2+$98      // word_54c8
+	lbne loc_a08b
+
+	// ldu word_5446
+	lda WORK_RAM2+$16
+	sta U_L
+	lda WORK_RAM2+$17
+	sta U_H
+
+	ldy #$2b
+	lda (U_L),y
+	sta B_Register
+
+	// ldu #$5050
+	lda #<WORK_RAM1+$20
+	sta U_L
+	lda #>WORK_RAM1+$20
+	sta U_H
+
+	ldy #$2b
+	lda (U_L),y
+	ldy #$25
+	sta (U_L),y
+
+	lda B_Register
+	ldy #$eb              // $ffeb,u
+	sta (U_L),y
+
+	jsr sub_a238
+
+	cmp #$01
+	lbne loc_a072
+
+	lda WORK_RAM2+$e6      // word_5515+1
+	lbne loc_a08b
+
+	// pshs u
+	lda U_L
+	pha
+	lda U_H
+	pha
+
+	// ldu word_5446
+	lda WORK_RAM2+$16
+	sta U_L
+	lda WORK_RAM2+$17
+	sta U_H
+
+	ldy #$0c
+	lda (U_L),y
+
+	// puls u
+	sta A_Register
+	pla
+	sta U_H
+	pla
+	sta U_L
+
+	lda A_Register
+	lbne loc_a072
+
+	lda WORK_RAM2+$99      // word_54c8+1
+	lbne loc_a08b
+
+	LDX(ea38)
+	lda B_Register
+	tay
+	lda (X_L),y
+
+	asl
+	sta A_Register
+
+	LDX(ea93)
+	clc
+	lda X_L
+	adc A_Register
+	sta X_L
+	lda X_H
+	adc #$00
+	sta X_H
+
+	ldy #$35
+	lda (U_L),y
+	sta B_Register
+
+	LDY(f167)
+
+	lda #$00
+	sta A_Register
+
+	lda B_Register
+	asl
+	sta B_Register
+
+	/* ldy d,y */
+	clc
+	lda Y_L
+	adc B_Register
+	sta tmp
+	lda Y_H
+	adc A_Register
+	sta tmp+1
+
+	ldy #$00
+	lda (tmp),y
+	sta Y_L
+	iny
+	lda (tmp),y
+	sta Y_H
+
+	ldy #$0c
+	lda (U_L),y
+	beq loc_a04d
+
+	lda WORK_RAM2+$94
+	beq loc_a045
+
+	cmp #$02
+	BCS(loc_a04d)
+
+
+loc_a045: // to do
+	jmp *
+	
+loc_a04d:
+	lda #$0a
+	sta B_Register
+	MUL()
+
+	clc
+	lda Y_L
+	adc B_Register
+	sta Y_L
+	lda Y_H
+	adc A_Register
+	sta Y_H
+
+	lda #$03   
+	STA_U_NEG($07) /* -7,u */
+	
+	jsr sub_a2ca
+	cmp #$01
+	bne loc_a08b
+
+	LDY(WORK_RAM1+$10)	// $5040
+
+	lda WORK_RAM2+$16     /* word_5446 */
+	sta U_L
+	lda WORK_RAM2+$17
+	sta U_H
+
+	lda #$00
+	sta WORK_RAM1+$19     /* word_5049 */
+
+	ldy #$2b
+	lda (U_L),y
+	sta B_Register
+
+	jsr sub_a58e
+	jsr sub_a1ca
+	bra loc_a08b
+
+loc_a072:
+	lda WORK_RAM2+$98          /* word_54c8 */
+	bne loc_a08b
+
+	lda WORK_RAM2+$94          /* word_54c4 */
+	bne loc_a08b
+
+	lda #$00
+	sta WORK_RAM2+$e6          /* word_5515+1 */
+	sta WORK_RAM2+$99          /* word_54c8+1 */
+	sta WORK_RAM2+$9c          /* word_54cc */
+
+    LDX(WORK_RAM1+$10)						// $5040
+    jsr sub_a21a
+   
+	
+loc_a08b:
+	CLR_U_NEG($07)                /* clr -7,u */
+
+	DEC_U($37)
+	BEQ(locret_a1c9)
+	
+	lda WORK_RAM2+$01             /* word_5430+1 */
+	cmp ea1c+2						// ea1e
+	bne loc_a0a3
+
+	lda WORK_RAM1+$c3             /* word_50f3 */
+	lbne locret_a1c9
+	
+loc_a0a3:
+	lda WORK_RAM2+$95             /* word_54c4+1 */
+	lbeq loc_a12a
+
+	ldy #$0c
+	lda (U_L),y
+	lbne loc_a12a
+
+	ldy #$35
+	lda (U_L),y
+	sta B_Register
+	sec
+	sbc #$09
+	sta B_Register
+	BCS(loc_a12a)
+
+	jsr sub_a22b
+
+	LDY(WORK_RAM1+$c0)		// $50f0
+
+	ldy #$37
+	lda (U_L),y
+	sec
+	sbc #$01
+
+	lda #$10
+	sta B_Register
+	MUL()
+
+	ADDY_D()
+
+	ldy #$2b
+	lda (U_L),y
+	ldy #$eb                  /* $ffeb,u */
+	sta (U_L),y
+
+	ldy #$00
+	lda (Y_L),y
+	sta B_Register
+
+	lda WORK_RAM2+$01         /* word_5430+1 */
+	cmp ea1c+2					// ea1e - Star ??
+	beq loc_a0d7
+
+	lda B_Register
+	eor #$01
+	sta B_Register
+
+loc_a0d7: // to do - Star ???
+	jmp *
+
+loc_a12a: // to do
+	jmp *
+
+loc_a1eb: // to do
+    jmp *
+	
+locret_a1c9:
+	rts
+	
+sub_a1ca:
+	jmp *
 	
 sub_a21a:
 	lda #$00
@@ -5808,8 +6560,74 @@ loc_a21d:
 
 	ldy #$06
 	sta (X_L),y
-
     rts
+	
+sub_a22b: // to do
+	jmp *
+
+sub_a238:
+
+	lda WORK_RAM2+$b4      // word_54e4
+	sta X_L
+	lda WORK_RAM2+$b5
+	sta X_H
+
+	lda WORK_RAM2+$01      // word_5430+1
+	cmp ea1c+1
+	bne loc_a258
+
+	LDX(WORK_RAM1+$a0)   // $50d0
+	lda #$03
+	sta B_Register
+	
+loc_a248:
+	ldy #$32
+	lda (X_L),y
+	beq loc_a252
+
+	ldy #$33
+	lda (X_L),y
+	bra loc_a25b
+
+loc_a252:
+	ADDX($0040)
+	DEC_B()
+	BNE(loc_a248)
+
+loc_a258:
+	lda WORK_RAM2+$e5      // word_5515
+
+loc_a25b:
+	lda X_L
+	sta WORK_RAM2+$16      // word_5446
+	lda X_H
+	sta WORK_RAM2+$17
+
+	lda #$28
+	sta B_Register
+	LDX(ea61)
+
+loc_a263:
+	lda B_Register
+	tay
+	dey                     /* convert 6809 1-based loop counter to 0-based index */
+	lda (X_L),y
+	cmp A_Register
+	beq loc_a26c
+
+	DEC_B()
+	BNE(loc_a263)
+
+	CLRA()
+	rts
+
+loc_a26c:
+	DEC_B()
+	lda #$01
+	sta A_Register
+	rts
+
+
 
 sub_a270:
 	// ldy #$5090
@@ -5823,7 +6641,7 @@ sub_a270:
 
 	// cmpa word_EA1C+1
 	cmp ea1c+1				// is enemy feedle ?
-	bne loc_a2b4			// nope
+	lbne loc_a2b4			// nope
 
 	// ldy #$50D0
 	lda #<WORK_RAM1+$a0
@@ -5885,7 +6703,7 @@ loc_a295:
 	lda A_Register
 	eor #$ff
 	sta A_Register
-	jmp loc_a2a6
+	bra loc_a2a6
 
 loc_a2a1:
 	// tst word_54C2+1
@@ -5938,6 +6756,269 @@ loc_a2b4:
 
 locret_a2c5:
 	rts
+	
+sub_a2ca:
+	ldy #$06
+	lda (U_L),y
+	sta A_Register
+
+	ldy #$04
+	lda (U_L),y
+	sta B_Register
+
+	ldy #$38
+	lda A_Register
+	sta (U_L),y
+	iny
+	lda B_Register
+	sta (U_L),y
+
+	/* pshs u */
+	lda U_L
+	pha
+	lda U_H
+	pha
+
+	/* ldu word_5446 */
+	lda WORK_RAM2+$16
+	sta U_L
+	lda WORK_RAM2+$17
+	sta U_H
+
+	ldy #$06
+	lda (U_L),y
+	sta A_Register
+
+	ldy #$04
+	lda (U_L),y
+	sta B_Register
+
+	/* puls u */
+	pla
+	sta U_H
+	pla
+	sta U_L
+
+	ldy #$27
+	lda A_Register
+	sta (U_L),y
+	iny
+	lda B_Register
+	sta (U_L),y
+
+	lda #$05
+	sta B_Register
+
+	lda WORK_RAM2+$01      /* word_5430+1 */
+	cmp ea1c
+	bne loc_a2f0
+
+	lda WORK_RAM1+$89      /* word_50b9 */
+	cmp #$0a
+	beq sub_a307
+
+loc_a2f0:
+	jmp loc_a309
+	
+sub_a2f2: // to do
+	jmp *
+	
+sub_a307:
+	lda	#5
+	
+loc_a309: // to do and test
+	ldy #$2c
+	lda B_Register
+	sta (U_L),y
+
+	lda #$01
+	//sta -9,u
+	STA_U_NEG($09)	/* -9,u */
+
+loc_a310:
+    lda #$02
+	sta byte_ab
+
+	ldy #$00
+	lda (X_L),y
+	INX16()
+	clc
+	ldy #$27
+	adc (U_L),y
+	ldy #$2d
+	sta (U_L),y
+
+	CLRA()
+
+	ldy #$00
+	lda (Y_L),y
+	sta B_Register
+
+	/* pshs y */
+	lda Y_L
+	pha
+	lda Y_H
+	pha
+
+	LDY(f0b0+3) // $f0b3
+
+	ASLB()
+
+	clc
+	lda Y_L
+	adc B_Register
+	sta Y_L
+	lda Y_H
+	adc A_Register
+	sta Y_H
+
+	ldy #$00
+	lda (Y_L),y
+	INY16()
+	clc
+	ldy #$38
+	adc (U_L),y
+	ldy #$2d
+	sec
+	sbc (U_L),y
+	bcc loc_a333
+	eor #$ff
+
+loc_a333:
+	CMPA_U_NEG($09) /* -9,u */
+	BCC(loc_a57d)
+
+loc_a339:
+	ldy #$00
+	lda (X_L),y
+
+	ldy #$eb              /* $ffeb,u */
+	lda (U_L),y
+	sta B_Register
+	cmp #$01
+	bne loc_a35b
+
+	lda #$20
+	LDB_U_NEG($07)			/* -7,u */
+	beq loc_a351
+
+	lda WORK_RAM2+$e5     /* word_5515 */
+	sta B_Register
+	cmp #$29
+	BCS(loc_a351)
+
+	lda #$20
+	clc
+	adc #$10
+
+loc_a351:           
+	LDB_U_NEG($0e)			/* -$0e,u */
+	cmp #$01
+	bne loc_a359
+
+	lda #$10
+
+loc_a359:
+	ldy #$00
+	sec
+	sbc (X_L),y
+
+loc_a35b:
+	LDB_U_NEG($07)			/* -7,u */
+	bne loc_a36f
+
+	ldy #$35
+	lda (U_L),y
+	sta B_Register
+	cmp #$0f
+	bne loc_a36f
+
+	ldy #$eb              /* $ffeb,u */
+	lda (U_L),y
+	sta B_Register
+	cmp #$01
+	beq loc_a36f
+
+	clc
+	adc #$10
+
+loc_a36f:
+	ldy #$28
+	clc
+	adc (U_L),y
+	ldy #$2d
+	sta (U_L),y
+
+	/* restore original Y for the second half */
+	pla
+	sta Y_H
+	pla
+	sta Y_L
+
+	ldy #$00
+	lda (Y_L),y
+	sta A_Register
+
+	ldy #$25
+	lda (U_L),y
+	sta B_Register
+	cmp #$01
+	bne loc_a3a2
+
+	lda #$20
+	LDB_U_NEG($07)         /* -7,u */
+	bne loc_a38f
+
+	lda WORK_RAM2+$e5     /* word_5515 */
+	sta B_Register
+	cmp #$29
+	BCS(loc_a398)
+
+	lda #$20
+	clc
+	adc #$10
+	bra loc_a398
+	
+loc_a38f: // to do
+	jmp *
+	
+loc_a398: // to do
+	jmp *
+	
+loc_a3a2: // to do
+	jmp *
+	
+loc_a57d:
+	/* puls y */
+	pla
+	sta Y_H
+	pla
+	sta Y_L
+
+
+	/* leay 2,y */
+	ADDY($0002)
+
+	/* leax -1,x */
+	DEX16()
+
+	/* dec $2c,u */
+	DEC_U($2c)
+	BNE(loc_a310)
+
+loc_a58a:
+	lda #$00
+	sta byte_a9
+
+	CLRA()
+	rts
+
+
+sub_a58e: // to do
+	jmp *
+
+sub_a598:	// to do
+	jmp *
 
 sub_a663: // to do, part of loc_8fd7
 	jmp *
@@ -6152,7 +7233,7 @@ loc_a6da:
 	ldy #$3b
 	lda (U_L),y
 	sta B_Register
-	beq loc_a6f9
+	lbeq loc_a6f9
 
 
 loc_a6df:
@@ -6240,7 +7321,10 @@ Player got hit ?
 
 */
 
-loc_a733: 
+loc_a733:  // to do
+	jmp *
+	
+sub_a737: // to do
 	jmp *
 
 sub_a7b0: // to do
@@ -6255,7 +7339,7 @@ sub_a7cb:
 	lda #$00
 	sta WORK_RAM2+$98      // word_54c8
 
-	LDX(WORK_RAM1)	// $5030
+	LDX(WORK_RAM1)			// $5030
 	jsr sub_a21a
 
 	ldy #$14
@@ -6277,7 +7361,7 @@ loc_a7db:
 loc_a7e0:
     ldy #0
     lda #0
-    sta (X_L),y          // clr ,x+
+    sta (X_L),y          	// clr ,x+
     INC16(X_L, X_H)
 
     dec B_Register
@@ -6347,7 +7431,7 @@ loc_a7f5:
     cmp #4
     bne loc_a81d
 
-    LDY(WORK_RAM1+$A0)		// $50d0
+    LDY(WORK_RAM1+$A0)	// $50d0
     jsr sub_b566
 
     ADDY($40)
@@ -6364,7 +7448,7 @@ loc_a81d:
 	cmp #4
 	lbne loc_a857
 
-	LDX(WORK_RAM1+$60)		// $5090
+	LDX(WORK_RAM1+$60)	// $5090
 
 	lda #$20
 	STA_X_OFFS($06)
@@ -6393,7 +7477,7 @@ loc_a81d:
     rts
 	
 loc_a857:
-	jsr sub_c3e6
+	jsr sub_c3e6	
 	beq locret_a86c
 
 	cmp #3
@@ -6410,15 +7494,12 @@ loc_a857:
 locret_a86c:
     rts
 
-sub_a86d:
+sub_a86d:		
 	jsr sub_c3e6
-
-	lda #$00
-	sta B_Register        // clrb
+	CLRB()  				// clrb
 
 	lda A_Register        // tsta
 	beq loc_a889
-
 	sec
 	sbc #$03              // suba #3
 	beq loc_a888
@@ -6433,7 +7514,6 @@ sub_a86d:
 
 	cmp #$03
 	beq loc_a887
-
 	jmp loc_b6ed
 
 
@@ -6455,7 +7535,7 @@ loc_a889:
 	lda B_Register
 	sta WORK_RAM2+$d7      // word_5506+1
 
-	lda WORK_RAM1+$1b2     // byte_51e2
+	lda byte_e2     		// byte_51e2
 	beq loc_a8c1
 
 	lda WORK_RAM2+$02      // word_5432
@@ -6463,7 +7543,7 @@ loc_a889:
 	sbc #$01
 	bne loc_a8c1
 
-	lda WORK_RAM1+$1bf     // word_51ef
+	lda byte_ef    		// word_51ef ( lives )
 	lsr
 	lsr
 	lsr
@@ -6508,7 +7588,7 @@ loc_a8c1:
 	lda #$03
 
 loc_a8c3:
-	sta WORK_RAM2+$e0      // word_550f
+	sta WORK_RAM2+$df      // word_550f
 
 	LDY(WORK_RAM1+$60)
 
@@ -6529,7 +7609,7 @@ loc_a8d4:
 	lbne loc_a942
 
 	lda WORK_RAM2+$e6      // word_5515+1
-	bne loc_a942
+	lbne loc_a942
 
 	lda #$20
 	ldy #$06
@@ -6558,26 +7638,32 @@ loc_a905:
 	sta (Y_L),y
 	
 loc_a915:
-	lda WORK_RAM2+$d7      // word_5506+1
+	jmp *					// implement later
+	lda WORK_RAM2+$d7      /* word_5506+1 */
+	sta tmp
+	LDU(f368)              /* table base */
+	//LDX(f492)          /* required by later code */
+	lda tmp
+	asl
+	tay
 
-	LDX(f368)          // base of pointer table into X
-	asl                 // A *= 2
-	tay                 // use Y as byte index, or tax if you want
-	lda (X_L),y
-	sta U_L
+	lda (U_L),y
+	sta tmp
 	iny
-	lda (X_L),y
+	lda (U_L),y
 	sta U_H
+	lda tmp
+	sta U_L
 
 	lda #$00
 	ldy #$15
 	sta (Y_L),y
 
-	lda WORK_RAM2+$d7      // word_5506+1
+	lda WORK_RAM2+$d7
 	cmp #$04
 	beq loc_a934
 
-	LDD($0940)				// 0x09 0x40 in A and B
+	LDD($0940)
 
 	ldy #$4e
 	lda A_Register
@@ -6760,13 +7846,123 @@ sub_b359:  // to do
 
 sub_b566: // to do 
 	jmp *
-		
-sub_b682: // to do
-	jmp *
 	
 sub_b665: // to do
 	jmp *
 	 
+		
+sub_b682:
+	lda #$10
+	sta B_Register
+
+	LDX(WORK_RAM2+$e0) // $5510
+
+loc_b687:
+	ldy #$00
+	lda #$00
+	sta (X_L),y
+
+	INX16()
+
+	DEC_B()
+	BNE(loc_b687)
+
+	LDX(WORK_RAM1+$60) //$5090
+	LDY(WORK_RAM1+$70) //$50a0
+	
+loc_b693:
+	
+	ldy #$00
+	lda #$00
+	sta (X_L),y
+
+	INX16()
+
+	CMPX(WORK_RAM1+$f0) //$5120
+	BNE(loc_b693)
+
+	lda byte_ef     		/* word_51ef */ 
+	and #$30
+	lsr
+	lsr
+	lsr
+	sta WORK_RAM2+$e0      /* word_550f+1 */
+
+	lda WORK_RAM2+$02      /* word_5432 */	  // 01
+	cmp #$12
+	bcc loc_b6b1			// use native compare flags instead of BCS ( emulated ) . bcs -> bcc
+
+	lda #$ff
+	sta WORK_RAM2+$e0      /* word_550f+1 */
+
+loc_b6b1:
+	LDD($a020)
+	STA_Y_NEG($0c)			// sta     -$C,y
+	STB_Y_NEG($0a)			// stb     -$A,y
+
+	jsr sub_c3e2
+
+	lda #<WORK_RAM1+$d0   /* $5100 */
+	sta U_L
+	lda #>WORK_RAM1+$d0
+	sta U_H
+
+	lda #$e6
+	sta B_Register
+	
+	lda A_Register
+	cmp #$04
+	beq loc_b6c6
+
+	lda #$c4
+	sta B_Register
+
+loc_b6c6:
+	INC_U_NEG($05)			/* -5,u */
+	INC_U($0b)
+	INC_U($1b)
+
+	TFR_B_A()
+
+	lda #$01
+	sta B_Register
+
+	STD_U_NEG($02)         /* -2,u */
+	
+	ldy #$0e
+	lda A_Register
+	sta (U_L),y
+	iny
+	lda B_Register
+	sta (U_L),y
+
+	ldy #$1e
+	lda A_Register
+	sta (U_L),y
+	iny
+	lda B_Register
+	sta (U_L),y
+
+	jsr sub_c173
+
+	inc WORK_RAM2+$e4     /* byte_5514 */
+
+	LDD($0330)
+
+	ldy #$05
+	lda A_Register
+	sta (Y_L),y
+
+	lda B_Register
+	sta WORK_RAM2+$ea     /* word_551a */
+
+	INC_A()
+	lda A_Register
+	sta WORK_RAM2+$ed     /* word_551c+1 */
+
+	jmp loc_b85c
+	
+
 loc_b6ed:
 	lda #$00
 	sta WORK_RAM2+$e9      // byte_5519
@@ -6781,29 +7977,31 @@ loc_b6ed:
 	inc WORK_RAM2+$ea      // word_551a+1
 
 loc_b6fe:
-	lda WORK_RAM2+$e1      // word_550f+1
+	lda WORK_RAM2+$e0      // word_550f+1
 	cmp #$ff
 	beq loc_b71e
 
 	lda WORK_RAM2+$0a      // word_5439+1
 	bne loc_b71e
 
-	inc WORK_RAM2+$e1      // word_550f+1
+	inc WORK_RAM2+$e0      // word_550f+1
 
 	lda WORK_RAM2+$07      // word_5437
 	cmp #$4b
 	bne loc_b71e
 
-	lda WORK_RAM2+$e1      // word_550f+1
+	lda WORK_RAM2+$e0      // word_550f+1
 	clc
 	adc #$08
 	bcc loc_b71e
 
-	sta WORK_RAM2+$e1      // word_550f+1
+	sta WORK_RAM2+$e0      // word_550f+1
 
 loc_b71e:
+	
 	lda WORK_RAM1+$24        // word_5054
-	TFR_A_B()	             // tfr a,b
+	sta A_Register
+	TFR_A_B()	               // tfr a,b
 
 	sec
 	sbc WORK_RAM2+$ea        // word_551a
@@ -6845,8 +8043,7 @@ loc_b741:
 	lda #$00
 	sta (Y_L),y
 
-	ldy #$fc              // -4,y
-	lda (Y_L),y
+	TST_Y_NEG($04)			// -4,y
 	lbeq loc_b7c6
 
 loc_b755:
@@ -6857,9 +8054,9 @@ loc_b755:
 	
 
 loc_b75c: 
-    jsr sub_c188
-	
+    jsr sub_c188 			
 loc_b75f:
+	
 	jmp	loc_b974
 	
 loc_b762:
@@ -6886,9 +8083,7 @@ loc_b774:
 	beq loc_b788
 	
 loc_b781:
-	ldy #$fc              // -4,y
-	lda #$00
-	sta (Y_L),y
+	CLR_Y_NEG($04)			// -4,y
 
 	lda #$ff
 	ldy #$1c
@@ -6922,13 +8117,13 @@ loc_b79b:
 	lda #$00
 	sta (Y_L),y
 
-	INC_Y($f4)
+	INC_Y_NEG($0C) // -$0c,y
 	
 	bra loc_b7b2
 	
 loc_b7ad:
 	INC_Y($2b)
-	DEC_Y($f4)          // -$0c,y
+	DEC_Y_NEG($0c)	// -$0c,y
 
 loc_b7b2:
 	jsr sub_c112
@@ -6974,8 +8169,7 @@ loc_b7de:
 	sta WORK_RAM2+$e4      // byte_5514
 
 	lda #$ff
-	ldy #$fb               // -5,y
-	sta (Y_L),y
+	STA_Y_NEG($05)			// sta -5,y
 
 	lda WORK_RAM2+$06      // word_5435+1
 	beq loc_b7f8
@@ -7009,15 +8203,14 @@ loc_b7f8:
 loc_b80d:
 	ldy #$31
 	lda (Y_L),y
-	ldy #$f4              // -$0c,y
-	sta (Y_L),y
+	STA_Y_NEG($0c)			// sta     -$C,y
 
 	jsr sub_c112
 	
 loc_b815:
 	ldy #$02
 	lda (Y_L),y
-	bne loc_b881
+	lbne loc_b881
 
 	LDX(f8dd)
 
@@ -7035,21 +8228,83 @@ loc_b82a: // to do
 loc_b834: // to do
 	jmp *
 	
-loc_b87b: // to do
-	jmp *
+loc_b85a:
+	INC_Y($03) // inc     3,y
 	
-loc_b881: // to do
-	jmp *
+loc_b85c:
+	//rts
+	jsr sub_c3a9
+	jsr sub_c3d1
+	jsr sub_c280
+	jmp loc_b873
+
+
+loc_b867:
+	jsr loc_c68e
+	LDY(WORK_RAM1+$70)	//$50a0
+	jmp loc_b85a
 	
-loc_b884: // to do
-	jmp *
+loc_b873:
+	jmp loc_b974
+
+
+loc_b876:
+	lda WORK_RAM2+$05      /* word_5435 */
+	bne loc_b873
+
+
+loc_b87b:
+	INC_Y($02)
+	CLR_Y($03)
+	jmp loc_b873
+
+
+loc_b881:
+	jsr sub_c173
+
+loc_b884:
+	jsr sub_c3e2
+	cmp #$01
+	bne loc_b88e
+	jmp loc_bc13
+
+
+loc_b88e:
+	LDX(WORK_RAM2+$e0)			//$5510
+
+	lda #<f908
+	sta U_L
+	lda #>f908
+	sta U_H
+
+	asl
+
+	/* jmp [a,u] */
+	clc
+	lda U_L
+	adc A_Register
+	sta byte_5
+	lda U_H
+	adc #$00
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sta byte_7
+	iny
+	lda (byte_5),y
+	sta byte_8
+
+	jmp (byte_7)
 	
+
+
 loc_b96b: // to do
 	jmp *
 	
 loc_b974:
 	jsr sub_c3e2
-
+	
 	cmp #$05
 	lbeq loc_ba2f
 
@@ -7079,8 +8334,7 @@ loc_b985:
 	lda (U_L),y
 	lbne loc_b9cc
 
-	ldy #$fc                 // -4,y
-	lda (Y_L),y
+	LDA_Y_NEG($04)			 // -4,y
 	lbne loc_b9cc
 
 	ldy #$07
@@ -7092,11 +8346,8 @@ loc_b985:
 	sta WORK_RAM1+$b7
 	sta WORK_RAM1+$c7
 
-	ldy #$f6                 // -$0a,y
-	lda (Y_L),y
-	sta B_Register
+	LDB_Y_NEG($0a)			// -$0a,y
 
-	ldy #$0b
 	INC_U($0b)
 
 	pha
@@ -7303,31 +8554,39 @@ locret_ba2e:
 loc_ba2f: // to do
 	jmp *
 	
+loc_bc13: // to do
+	jmp *
+	
 sub_c112:
 	jmp * // to do
 	
 sub_c159: // to do
     jmp *
+	
+sub_c173:
+	LDD($0900)
+	STD_Y_NEG($02)			/* -2,y */
 
+	CMPY(WORK_RAM1+$c0)	//$50f0
+	BNE(loc_c183)
+
+	LDY(WORK_RAM1+$70)	//$50a0
+	rts
+	
+loc_c183:
+	ADDY($0010)
+	bra sub_c173
+	
 sub_c188:
 	ldy #$12
-	lda (Y_L),y
-	ldy #$01
-	sta (Y_L),y
-
-	ldy #$10
-	lda (Y_L),y
+	lda (Y_L),y			// reads 0x1 from 0x50b2
 	sta A_Register
-	iny
-	lda (Y_L),y
-	sta B_Register
+	ldy #$01
+	sta (Y_L),y			// writes 0x01 to 0x50a1
 
-	ldy #$f0              // -$10,y
-	lda A_Register
-	sta (Y_L),y
-	iny
-	lda B_Register
-	sta (Y_L),y
+	LDD_Y_OFF($10)
+
+	STD_Y_NEG($10)			/* std -$10,y */
 
 	ldy #$17
 	lda (Y_L),y
@@ -7340,7 +8599,7 @@ sub_c188:
 	LEAU_SUB($0010)
 
 	jsr sub_9d4d
-
+	
 	LDY(WORK_RAM1+$70)
 	TFR_Y_U()
 	LEAU_SUB($0010)
@@ -7357,12 +8616,7 @@ sub_c188:
 	lda (Y_L),y
 	sta B_Register
 
-	ldy #$f0              // -$10,y
-	lda A_Register
-	sta (Y_L),y
-	iny
-	lda B_Register
-	sta (Y_L),y
+	STD_Y_NEG($10)			/* std -$10,y */
 
 	ldy #$17
 	lda (Y_L),y
@@ -7379,12 +8633,12 @@ sub_c188:
 	lda (Y_L),y
 	beq locret_c1fa
 
-	ldy #$f4              // -$0c,y
-	lda (Y_L),y
+	LDA_Y_NEG($0c)			/* lda -$0c,y */
+	lda A_Register
 	clc
 	adc #$01
+	
 	pha
-
 	ldy #$18
 	lda (Y_L),y
 	beq !minus2+
@@ -7399,51 +8653,411 @@ sub_c188:
 loc_c1c8:
 	jmp *
 
-
 locret_c1fa:
     rts
 	
+sub_c280:
+	CLR_Y($40)
 
-sub_c3e2:
-	CLRB()
-	INC_B()
+	jsr sub_c3e2
+	cmp #$03
+	bne loc_c294
+
+	ldy #$05
+	lda (Y_L),y
+	cmp #$08
+	beq loc_c298
+	cmp #$09
+	beq loc_c298
+
+loc_c294:
+	lda #$ff
+	STA_Y_NEG($05)            /* sta -5,y */
+
+loc_c298:
+	jsr sub_c3e2
+	asl
+	sta tmp                 /* preserve table offset */
+
+	LDX(f9ab)
+
+	lda tmp
+	tay
+
+	lda (X_L),y
+	sta U_L
+	iny
+	lda (X_L),y
+	sta U_H
+
+	lda #$0a
+	sta B_Register
+
+	ldy #$05
+	lda (Y_L),y
+	MUL()
+
+	clc
+	lda U_L
+	adc B_Register
+	sta U_L
+	lda U_H
+	adc A_Register
+	sta U_H
+
+	/* ldd ,u++ */
+	ldy #$00
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+	ADDU($0002)
+
+	ldy #$10
+	lda A_Register
+	sta (Y_L),y
+	iny
+	lda B_Register
+	sta (Y_L),y
+
+	ldy #$02
+	lda (Y_L),y
+	bne loc_c2b9
+
+	CLR_Y_NEG($0e)            /* clr -$0e,y */
+	CLR_Y_NEG($0b)            /* clr -$0b,y */
+	ADDU($0002)
+	jmp loc_c2bf
+
+loc_c2b9:
+	/* ldd ,u++ */
+	ldy #$00
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+	ADDU($0002)
+
+	STA_Y_NEG($0e)            /* sta -$0e,y */
+	STB_Y_NEG($0b)            /* stb -$0b,y */
+
+loc_c2bf:
+	/* ldd ,u++ */
+	ldy #$00
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+	ADDU($0002)
+
+	STA_Y_NEG($06)            /* sta -6,y */
+	ldy #$17
+	lda B_Register
+	sta (Y_L),y
+
+	/* ldd ,u++ */
+	ldy #$00
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+	ADDU($0002)
+
+	STD_Y_NEG($04)            /* std -4,y */
+
+	ldy #$1d
+	lda B_Register
+	sta (Y_L),y
+
+	ldy #$25
+	lda (Y_L),y
+	beq loc_c2d4
+
+	DEC_Y_NEG($04)            /* dec -4,y */
+
+loc_c2d4:
+	CLR_Y($25)
+	lda #$00
+	sta WORK_RAM2+$ef         /* word_551f */
+
+	jsr sub_c3e2
+	cmp #$02
+	bcs loc_c307              /* 6809 bcc => A >= 2 */
+
+	ldy #$05
+	lda (Y_L),y
+	cmp #$04
+	bcc loc_c307              /* 6809 bcs => A < 4 */
+
+	jsr sub_c3e2
+	cmp #$01
+	bne loc_c2f8
+
+	ldy #$05
+	lda (Y_L),y
+	cmp #$09
+	beq loc_c2fe
+	cmp #$0a
+	beq loc_c2fe
+
+loc_c2f8:
+	ldy #$05
+	lda (Y_L),y
+	cmp #$07
+	bcs loc_c307              /* 6809 bcc => A >= 7 */
+
+loc_c2fe:
+	inc WORK_RAM2+$ef         /* word_551f */
+
+	LDB_Y_NEG($03)            /* ldb -3,y */
+	lda B_Register
+	clc
+	adc #$0f
+	sta B_Register
+	STB_Y_NEG($03)            /* stb -3,y */
+
+loc_c307:
+	/* ldd ,u */
+	ldy #$00
+	lda (U_L),y
+	sta A_Register
+	iny
+	lda (U_L),y
+	sta B_Register
+
+	lda A_Register
+	sta WORK_RAM2+$e5         /* word_5515 */
+
+	lda B_Register
+	pha
+	jsr sub_c3e2
+	pla
+	sta B_Register
+
+	cmp #$02
+	bne loc_c32a
+
+	ldy #$05
+	lda (Y_L),y
+	cmp #$09
+	beq loc_c321
+	cmp #$08
+	bne loc_c32a
+
+loc_c321:
+	lda WORK_RAM1+$55         /* word_5085 */
+	cmp #$0f
+	beq loc_c32a
+
+	lda B_Register
+	sec
+	sbc #$10
+	sta B_Register
+
+loc_c32a:
+	ldy #$33
+	lda B_Register
+	sta (Y_L),y
+
+	jsr sub_c3e2
+	cmp #$02
+	beq loc_c33c
+	cmp #$03
+	beq loc_c33c
+	cmp #$05
+	bne loc_c354
+
+loc_c33c:
+	ldy #$05
+	lda (Y_L),y
+	cmp #$04
+	bcc loc_c354              /* 6809 bcs => A < 4 */
+	cmp #$07
+	bcs loc_c354              /* 6809 bcc => A >= 7 */
+
+	lda WORK_RAM2+$02         /* word_5432 */
+	cmp #$12
+	bcc loc_c354              /* 6809 bcs => A < $12 */
+
+	lda #$20
+	LDA_Y_NEG($03)            /* adda -3,y */
+	clc
+	adc A_Register
+	STA_Y_NEG($03)
+	rts
+
+loc_c354:
+	lda WORK_RAM2+$ef         /* word_551f */
+	lbeq locret_c3a8
+
+	jsr sub_c3e2
+	cmp #$01
+	lbne loc_c39b
+
+	lda WORK_RAM2+$02         /* word_5432 */
+	cmp #$12
+	bcs loc_c36e              /* 6809 bcc => A >= $12 */
+
+	lda WORK_RAM1+$5a         /* word_508a */
+	sta B_Register
+	cmp #$05
+	bcs loc_c380              /* 6809 bcc => B >= 5 */
+
+loc_c36e:
+	lda #$28
+	LDA_Y_NEG($03)
+	clc
+	adc A_Register
+	STA_Y_NEG($03)
+
+	lda B_Register
+	cmp #$04
+	bcs loc_c380              /* 6809 bcc => B >= 4 */
+
+	ldy #$1d
+	lda (Y_L),y
+	clc
+	adc #$01
+	sta (Y_L),y
+
+loc_c380:
+	lda WORK_RAM2+$02         /* word_5432 */
+	cmp #$12
+	bcs loc_c39b              /* 6809 bcc => A >= $12 */
+
+	lda WORK_RAM1+$5c         /* word_508c */
+	cmp #$04
+	bcs loc_c39b              /* 6809 bcc => A >= 4 */
+
+	sec
+	sbc WORK_RAM1+$5a         /* suba word_508a */
+	bcs loc_c39b              /* 6809 bcc => result >= 0 */
+
+	cmp #$fe
+	bcs loc_c39b              /* 6809 bcc => A >= $fe */
+
+	lda #$10
+	STA_Y_NEG($03)
+
+loc_c39b:
+	lda WORK_RAM2+$e0         /* word_550f+1 */
+	cmp #$03
+	bcc locret_c3a8           /* 6809 bcs => A < 3 */
+
+	lda #$09
+	LDA_Y_NEG($03)
+	clc
+	adc A_Register
+	STA_Y_NEG($03)
+
+locret_c3a8:
+    rts
+	
+sub_c3a9:
+	CLR_Y($18)
+
+	lda WORK_RAM2+$ea      /* word_551a */
+
+	LDA_Y_NEG($0c)         /* lda -$0c,y */
+	lda A_Register
+	sta tmp
+
+	lda WORK_RAM2+$ea
+	sec
+	sbc tmp
+	lbcc loc_c3de
+
+	INC_Y($18)
+
+loc_c3b6:
+	ldy #$19
+	sta (Y_L),y
+
+	jsr sub_c3e2
+
+	cmp #$01
+	beq locret_c3d0
+
+	cmp #$04
+	bcs locret_c3d0
+
+	ldy #$18
+	lda (Y_L),y
+	beq locret_c3d0
+
+	ldy #$19
+	lda (Y_L),y
+	sec
+	sbc #$10
+	sta (Y_L),y
+
+locret_c3d0:
+	rts
+
+sub_c3d1:
+	CLR_Y($12)
+
+	ldy #$05
+	lda (Y_L),y
+	cmp #$01
+	beq locret_c3dd
+
+	INC_Y($12)
+
+locret_c3dd:
+	rts
+	
+
+loc_c3de:
+    jmp *
+
+sub_c3e2: 
+	lda #$01
+	sta B_Register
 	bra loc_c3e7
-
 
 sub_c3e6:
 	CLRB()
-
 loc_c3e7:
-	lda WORK_RAM2+$01      // word_5430+1
-	sta A_Register			// preserve A
-	
-	lda B_Register         // tstb
+	lda WORK_RAM2+$01      // word_5430+1 - value: 0x02
+	sta A_Register         // save default return value
+
+	lda B_Register
 	beq locret_c3f6
 
+	// pushes 5120 on arcade. Mega b120 ( correct ).
 	lda X_L
 	pha
 	lda X_H
 	pha
 
 	LDX(ff39)
-	tay
-	lda (X_L),y
+	lda A_Register		// contains 0x2.
+	tay					
+	lda (X_L),y		// 0x3 correct.
+	sta A_Register
 
+	// restore 0x5120 / 0xB120
 	pla
 	sta X_H
 	pla
 	sta X_L
 
 locret_c3f6:
-    rts
-	
-	
+	lda A_Register
+	rts
 	
 loc_c67a:	// to do
 	lda #$1
 	jmp	loc_c6c3
 
-
+loc_c68e:	// to do
+	jmp *
+	
 loc_c692: // to do	
 	jmp *
 
@@ -7455,6 +9069,12 @@ loc_c69a: // to do
 	
 
 loc_c6a2: // to do
+	jmp *
+	
+loc_c6b2: // to do
+	jmp *
+	
+loc_c6b6:	// to do
 	jmp *
 	
 // to do	
@@ -7734,6 +9354,3 @@ loc_d406:
 	sta A_Register
 	
 	jmp * // continue here.
-
-
-
