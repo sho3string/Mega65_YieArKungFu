@@ -7,22 +7,22 @@
 
 /* ZP */
 * = $200 "Basepage - yiearkungfu.asm" virtual
-	byte_0:		.byte	$00
-	byte_1:		.byte	$00
-	byte_2:		.byte	$00
-	byte_3:		.byte	$00
-	byte_4:		.byte	$00
-	byte_5:		.byte	$00
-	byte_6:		.byte	$00
-	byte_7:		.byte	$00
-	byte_8:		.byte	$00
-	byte_9:		.byte	$00
-	byte_a:		.byte	$00
-	byte_b:		.byte	$00
-	byte_c:		.byte	$00
-	byte_d:		.byte	$00
-	byte_e:		.byte	$00
-	byte_f:		.byte	$00
+	byte_0:	.byte	$00
+	byte_1:	.byte	$00
+	byte_2:	.byte	$00
+	byte_3:	.byte	$00
+	byte_4:	.byte	$00
+	byte_5:	.byte	$00
+	byte_6:	.byte	$00
+	byte_7:	.byte	$00
+	byte_8:	.byte	$00
+	byte_9:	.byte	$00
+	byte_a:	.byte	$00
+	byte_b:	.byte	$00
+	byte_c:	.byte	$00
+	byte_d:	.byte	$00
+	byte_e:	.byte	$00
+	byte_f:	.byte	$00
 	byte_10:	.byte	$00
 	byte_11:	.byte	$00
 	byte_12:	.byte	$00
@@ -266,7 +266,7 @@
 
 /* Constants */
 
-	// ZP layout
+// ZP layout
 .const sprPtrLo	= byte_30   // X pointer low
 .const sprPtrHi	= byte_31   // X pointer high
 .const logoPtrLo	= byte_46   // U pointer low
@@ -275,6 +275,17 @@
 .const logoCount	= byte_20   // Y equivalent
 .const tmpPtrLo 	= byte_f4
 .const tmpPtrHi 	= byte_f5
+
+// Playfield ZP layout
+.const PTR_L		= byte_ba
+.const PTR_H		= byte_bb
+.const PTR_B2		= byte_bc
+.const PTR_B3		= byte_bd
+
+.const PTR2_L		= byte_be
+.const PTR2_H		= byte_bf
+.const PTR2_B2		= byte_c0
+.const PTR2_B3		= byte_c1
 
 #import "Source/asm/Constants.asm"
 
@@ -315,7 +326,7 @@ Entry:
 	// Loads assets
 	LoadFile(GRAPHMEM, "TS.CHR") // Load graphical assets ( sprites and backghrounds )
 	LoadFile(COLOR_RAM, "COLORRAM.BIN") // Load the RRB colour stream
-
+	LoadFile(PLAYFIELD, "PLYFLD.BIN")
 	// Disable raster interrupts.
 	lda #$00
 	sta vicii_irqmask
