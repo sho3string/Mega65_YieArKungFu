@@ -29,6 +29,7 @@
 .const Q_ROW_P1	= byte_5e
 .const Q_ROW_P2	= byte_5f
 
+
 .const FCM_YOFFS_DIR		= $10	// bit4 in raster-hi
 .const SPR_TILE_STRIDE	= 16	// 16 tiles across
 .const SPR_TILE_BASE		= $0200	// Add offset to tilesheet to begin at sprite data.
@@ -88,6 +89,18 @@ BuildRowListsFromArcadeRAM:
     lda Q_ATTR_RAW
     and #%11000000
     sta Q_FLIPBITS
+	
+	/* Convert arcade flip bits to MEGA65 colour flip bits */
+	lda Q_FLIPBITS
+	eor #$40	// sprites already face towards the right, arcade does the opposite and they facing left.
+				// 0x40 is set for sprites to face right on arcade, so we exclusive or to remove this on the mega65
+	and #$40
+	sta Q_MEGA_FLP
+
+	lda Q_FLIPBITS
+	and #$80
+	ora Q_MEGA_FLP
+	sta Q_MEGA_FLP
 
     lda Q_ATTR_RAW
     and #%00111111
@@ -339,7 +352,8 @@ RRB_BuildRow:
 	lda PixieMask,x
 	sta ((COLPTR0)),z
 	inz
-	lda #0
+	//lda #0
+	lda PixieFlip,x        /* Colour RAM byte 0: flip bits */
 	sta ((COLPTR0)),z
 	inz
 	sta ((COLPTR0)),z
@@ -619,8 +633,6 @@ RRB_BuildAllRows:
     jsr RRB_ClearUsedMarks
     rts
 
-
-	
 RRB_ClearUsedMarks:
     ldx #0
 !:
@@ -634,7 +646,67 @@ RRB_ClearUsedMarks:
 !done:
     rts
 
+/*
+
+When 16x16 quads are flipped horizontally, we don't only
+on flipping each pixie. We must also flip the left and right
+quad as pixies are only 8x8 pixels. Otherwise we end up with 
+an object which is inside out.
+
+Also swap the left and right quadrants because pixies are 8x8 pixies
+and you cannot completely flip a 16x16 sprite by flipping individual tiles.
+
+*/
+
+
+StoreTile_Q_B1:
+    lda Q_FLIPBITS
+    and #$40
+    bne !normal+
+    jmp StoreTile_B2
+!normal:
+    jmp StoreTile_B1
 	
+StoreTile_Q_B2:
+    lda Q_FLIPBITS
+    and #$40
+    bne !normal+
+    jmp StoreTile_B1
+!normal:
+    jmp StoreTile_B2
+
+	
+StoreTile_Q_TL:
+	lda Q_FLIPBITS
+	and #$40              /* arcade horizontal flip */
+	bne !normal+
+	jmp StoreTile_TR
+!normal:
+	jmp StoreTile_TL
+
+StoreTile_Q_TR:
+	lda Q_FLIPBITS
+	and #$40
+	bne !normal+
+	jmp StoreTile_TL
+!normal:
+	jmp StoreTile_TR
+
+StoreTile_Q_BL:
+	lda Q_FLIPBITS
+	and #$40
+	bne !normal+
+	jmp StoreTile_BR
+!normal:
+	jmp StoreTile_BL
+
+StoreTile_Q_BR:
+	lda Q_FLIPBITS
+	and #$40
+	bne !normal+
+	jmp StoreTile_BL
+!normal:
+	jmp StoreTile_BR
 // ------------------------------------------------------------
 // StoreTile_TL  (tile = base + 0)
 // ------------------------------------------------------------
@@ -786,6 +858,8 @@ StoreTile_B2:
 // ------------------------------------------------------------
 Emit_TL_R_top:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 	lda Q_ROW
@@ -799,7 +873,7 @@ Emit_TL_R_top:
 
 	lda Q_TOP                    // TopMask[sub]
 	sta PixieMask,x
-	jsr StoreTile_TL
+	jsr StoreTile_Q_TL
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -817,6 +891,8 @@ Emit_TL_R_top:
 // ------------------------------------------------------------
 Emit_TR_R_top:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 	lda Q_ROW
@@ -836,7 +912,7 @@ Emit_TR_R_top:
 
 	lda Q_TOP                   // TopMask[sub]
 	sta PixieMask,x
-	jsr StoreTile_TR
+	jsr StoreTile_Q_TR
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -853,6 +929,8 @@ Emit_TR_R_top:
 // ------------------------------------------------------------
 Emit_TL_R1_bot:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 	lda Q_ROW_P1
@@ -865,7 +943,7 @@ Emit_TL_R1_bot:
 	sta PixieXHi,x
 	lda Q_BOT
 	sta PixieMask,x
-	jsr StoreTile_BL
+	jsr StoreTile_Q_BL
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -883,6 +961,8 @@ Emit_TL_R1_bot:
 // ------------------------------------------------------------
 Emit_TR_R1_bot:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 	lda Q_ROW_P1
@@ -902,7 +982,7 @@ Emit_TR_R1_bot:
 
 	lda Q_BOT
 	sta PixieMask,x
-	jsr StoreTile_BR
+	jsr StoreTile_Q_BR
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -920,6 +1000,8 @@ Emit_TR_R1_bot:
 
 Emit_BL_R1_top:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 
@@ -935,7 +1017,7 @@ Emit_BL_R1_top:
 
 	lda Q_TOP                // TopMask[sub]
 	sta PixieMask,x
-	jsr StoreTile_BL
+	jsr StoreTile_Q_BL
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -953,6 +1035,8 @@ Emit_BL_R1_top:
 // ------------------------------------------------------------
 Emit_BR_R1_top:
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 	lda Q_ROW_P1
@@ -972,7 +1056,7 @@ Emit_BR_R1_top:
 
 	lda Q_TOP
 	sta PixieMask,x
-	jsr StoreTile_BR
+	jsr StoreTile_Q_BR
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -989,6 +1073,8 @@ Emit_BR_R1_top:
 // ------------------------------------------------------------
 Emit_BL_R2_bot:
     ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
     lda #1
     sta PixieActive,x
 
@@ -1004,7 +1090,7 @@ Emit_BL_R2_bot:
 
     lda Q_BOT
     sta PixieMask,x
-    jsr StoreTile_B1   // <-- NOT BL
+    jsr StoreTile_Q_B1   // <-- NOT BL
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -1021,6 +1107,8 @@ Emit_BL_R2_bot:
 // ------------------------------------------------------------
 Emit_BR_R2_bot:
     ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
     lda #1
     sta PixieActive,x
 
@@ -1041,7 +1129,7 @@ Emit_BR_R2_bot:
 
     lda Q_BOT
     sta PixieMask,x
-    jsr StoreTile_B2   // <-- NOT BR
+    jsr StoreTile_Q_B2   // <-- NOT BR
 	
 	ldy PixieRow,x
 	lda RowHead,y
@@ -1056,6 +1144,8 @@ Emit_BR_R2_bot:
 Emit_TL_R_aligned:
 
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 
@@ -1087,6 +1177,8 @@ Emit_TL_R_aligned:
 Emit_TR_R_aligned:
 
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 
@@ -1122,6 +1214,8 @@ Emit_TR_R_aligned:
 Emit_BL_R1_aligned:
 
 	ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 
@@ -1153,6 +1247,8 @@ Emit_BL_R1_aligned:
 Emit_BR_R1_aligned:
 
     ldx P_IDX
+	lda Q_MEGA_FLP
+	sta PixieFlip,x
 	lda #1
 	sta PixieActive,x
 
@@ -1186,9 +1282,10 @@ Emit_BR_R1_aligned:
 
 
 //RRB_FramePhase:		.byte 0    // 0 or 1
-RRB_NeededThisRow:		.byte 0    // temp for current row
+RRB_NeededThisRow:	.byte 0    // temp for current row
 RowCount:				.byte 0
-PixieCount:				.byte 0
+PixieCount:			.byte 0
+Q_MEGA_FLP:			.byte 0
 
 RowPeakTable:			.fill CHARS_HIGH, 0 // debugging.
 
@@ -1198,6 +1295,7 @@ PixieXLo:				.fill PIXIE_MAX, 0
 PixieXHi:				.fill PIXIE_MAX, 0   // only bits0-1 used
 PixieTileLo:			.fill PIXIE_MAX, 0
 PixieTileHi:			.fill PIXIE_MAX, 0
+PixieFlip:				.fill PIXIE_MAX, 0
 // Temp working set for one row build
 PixieMask:				.fill PIXIE_MAX, 0
 RowHead:				.fill CHARS_HIGH, $ff   // head index per row
