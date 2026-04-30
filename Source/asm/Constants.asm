@@ -20,11 +20,11 @@ byte 1 - character code LSB
 */
 
 // - work ram 0x5000 - 0x57ff
-.const SPRITE_RAM1		= $9000
-.const WORK_RAM1			= $9030
-.const CMD_QUEUE			= $92C0
-.const SPRITE_RAM2		= $9400
-.const WORK_RAM2			= $9430
+.const SPRITE_RAM1		= $b000
+.const WORK_RAM1			= $b030
+.const CMD_QUEUE			= $b2C0
+.const SPRITE_RAM2		= $b400
+.const WORK_RAM2			= $b430
 .const SCREEN_BASE		= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
 .const ARCADE_VRAM_BASE	= $5800  /* Arcade character ram */
 .const SCREEN_WIDTH 		= 256	 /* arcade is 256 - 32 characters visible */
@@ -38,25 +38,28 @@ byte 1 - character code LSB
 .const COLOR_RAM			= $FF80000 
 //.const LOADADDR			= $40000			// use spare ram to load stuff into.
 .const GRAPHMEM  			= $30000 			// this will be our character generator at bank 2
+.const PLAYFIELD			= $20000			// Playfield data at bank1
 .const TILE_OFFSET		= GRAPHMEM/64
 //.const MEMBANK			= LOADADDR>>16		// 0x40000 >> 16 = 4
 .const TAIL_OFF			= CHARS_WIDE*2
 .const arcadeRowSize		= 6 // offset/0x40
 .const hw_nmi_vec 		= $fffa
 .const hw_irq_vec 		= $fffe
-.const vicii_irqmask 	= $d01a
-.const ciaa_d 			= $dc0d
-.const ciab_d 			= $dd0d
-.const vicii_rcl 		= $d012
-.const vicii_rch 		= $d011
-.const vicii_irq		= $d019
+.const vicii_irqmask 		= $d01a
+.const ciaa_d 				= $dc0d
+.const ciab_d 				= $dd0d
+.const vicii_rcl 			= $d012
+.const vicii_rch 			= $d011
+.const vicii_irq			= $d019
+
 
 // 6809 registers
 .const Y_L					= $aa
 .const Y_H					= $ab
+.const U_L					= $ba
+.const U_H					= $bb
+.const zp_cmd_param		= $f1
 .const B_Register			= $f2
-.const U_L					= $f3
-.const U_H					= $f4
 .const X_L					= $f5
 .const X_H					= $f6
 .const FB_L				= $f7
@@ -65,6 +68,8 @@ byte 1 - character code LSB
 .const Flags				= $fa
 .const tmp					= $fb
 .const tmp2				= $fc
+.const tmp3				= $fd
+.const Y_Register			= $fe
 
 
 // labels
