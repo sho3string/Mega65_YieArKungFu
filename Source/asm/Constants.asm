@@ -6,8 +6,8 @@
 .const TRANSPARENT 			= $80
 
 // sprite queue variables
-.const SPRITE_MAX			= 23	 									// Maximum # of sprites to queue
-.const PIXIE_MAX			= 180
+.const SPRITE_MAX				= 23	 									// Maximum # of sprites to queue
+.const PIXIE_MAX				= 180
 
 /*
 On arcade.
@@ -20,15 +20,15 @@ byte 1 - character code LSB
 */
 
 // - work ram 0x5000 - 0x57ff
-.const SPRITE_RAM1		= $b000
-.const WORK_RAM1			= $b030
-.const CMD_QUEUE			= $b2C0
-.const SPRITE_RAM2		= $b400
-.const WORK_RAM2			= $b430
+.const SPRITE_RAM1		= $C000
+.const WORK_RAM1			= $C030
+.const CMD_QUEUE			= $C2C0
+.const SPRITE_RAM2		= $C400
+.const WORK_RAM2			= $C430
 .const SCREEN_BASE		= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
 .const ARCADE_VRAM_BASE	= $5800  /* Arcade character ram */
 .const SCREEN_WIDTH 		= 256	 /* arcade is 256 - 32 characters visible */
-.const SCREEN_HEIGHT 		= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
+.const SCREEN_HEIGHT 	= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
 .const CHARS_WIDE 		= (SCREEN_WIDTH / 8) 				// 32 characters.
 .const CHARS_HIGH 		= (SCREEN_HEIGHT / 8)				// 32 characters, 28 visible.
 .const TOTAL_CHARS  		= CHARS_WIDE + RRB_Tail_words   
@@ -45,9 +45,10 @@ byte 1 - character code LSB
 .const arcadeRowSize		= 6 // offset/0x40
 .const hw_nmi_vec 		= $fffa
 .const hw_irq_vec 		= $fffe
-.const vicii_irqmask 		= $d01a
-.const ciaa_d 				= $dc0d
-.const ciab_d 				= $dd0d
+.const vicii_irqmask 	= $d01a
+.const ciaa_d 			= $dc0d
+.const ciaa_timer_a		= $dd0e
+.const ciab_d 			= $dd0d
 .const vicii_rcl 			= $d012
 .const vicii_rch 			= $d011
 .const vicii_irq			= $d019
@@ -58,12 +59,10 @@ byte 1 - character code LSB
 .const Y_H					= $ab
 .const U_L					= $ba
 .const U_H					= $bb
-.const zp_cmd_param		= $f1
 .const B_Register			= $f2
+.const zp_cmd_param		= $f4
 .const X_L					= $f5
 .const X_H					= $f6
-.const FB_L				= $f7
-.const FB_H				= $f8
 .const A_Register			= $f9
 .const Flags				= $fa
 .const tmp					= $fb
