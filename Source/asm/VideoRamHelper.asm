@@ -101,21 +101,21 @@ TranslateArcadeTextPtrToMega:
 
 	// base = SCREEN_BASE + row * ROW_STRIDE
 	lda #<SCREEN_BASE
-	sta byte_fd
+	sta WORK_RAM1+$1cd  //byte_fd
 	lda #>SCREEN_BASE
-	sta byte_fe
+	sta WORK_RAM1+$1ce  //byte_fe
 
 	ldx byte_10
 	!row_add:
 	cpx #0
 	beq !row_done+
 	clc
-	lda byte_fd
+	lda WORK_RAM1+$1cd  //byte_fd
 	adc #<($40 + (RRB_Tail_words * 2))
-	sta byte_fd
-	lda byte_fe
+	sta WORK_RAM1+$1cd  //byte_fd
+	lda WORK_RAM1+$1ce  //byte_fe
 	adc #>($40 + (RRB_Tail_words * 2))
-	sta byte_fe
+	sta WORK_RAM1+$1ce  //byte_fe
 	dex
 	bra !row_add-
 	!row_done:
@@ -124,19 +124,19 @@ TranslateArcadeTextPtrToMega:
 	ldx byte_10
 	lda RowPrefixBytes,x
 	clc
-	adc byte_fd
-	sta byte_fd
+	adc WORK_RAM1+$1cd  //byte_fd
+	sta WORK_RAM1+$1cd  //byte_fd
 	bcc !no_prefix_carry+
-	inc byte_fe
+	inc WORK_RAM1+$1ce  //byte_fe
 	!no_prefix_carry:
 
 	// add cell*2
 	lda byte_12
 	asl
 	clc
-	adc byte_fd
-	sta byte_fd
+	adc WORK_RAM1+$1cd  //byte_fd
+	sta WORK_RAM1+$1cd  //byte_fd
 	bcc !done+
-	inc byte_fe
+	inc WORK_RAM1+$1ce  //byte_fe
 !done:
     rts
