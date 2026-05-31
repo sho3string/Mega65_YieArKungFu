@@ -17,7 +17,7 @@
 .const Q_CARRY		= byte_42   // carry temp for tile hi add
 .const Q_YSUB5		= byte_43   // MUST be a safe scratch not used elsewhere
 .const Q_YSUB		= byte_44 
-.const XHI_TEMP	= byte_45
+.const XHI_TEMP		= byte_45
 .const SORT_I		= byte_46   // choose free zp
 .const KEY_X		= byte_47
 .const Q_XHI		= byte_48
@@ -26,14 +26,14 @@
 .const COLPTR1		= byte_5b
 .const COLPTR2		= byte_5c
 .const COLPTR3		= byte_5d
-.const Q_ROW_P1	= byte_5e
-.const Q_ROW_P2	= byte_5f
+.const Q_ROW_P1		= byte_5e
+.const Q_ROW_P2		= byte_5f
 
 
-.const FCM_YOFFS_DIR		= $10	// bit4 in raster-hi
+.const FCM_YOFFS_DIR	= $10	// bit4 in raster-hi
 .const SPR_TILE_STRIDE	= 16	// 16 tiles across
-.const SPR_TILE_BASE		= $0200	// Add offset to tilesheet to begin at sprite data.
-.const Y_BIAS				= 16
+.const SPR_TILE_BASE	= $0200	// Set tilesheet offset to sprite data.
+.const Y_BIAS			= 16
 
 *=* "Sprite Queue Routines - SpriteQueue.asm"
 
