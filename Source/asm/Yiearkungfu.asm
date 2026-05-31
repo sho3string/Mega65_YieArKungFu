@@ -269,8 +269,8 @@
 // ZP layout
 .const sprPtrLo	= byte_30   // X pointer low
 .const sprPtrHi	= byte_31   // X pointer high
-.const logoPtrLo	= byte_46   // U pointer low
-.const logoPtrHi	= byte_47   // U pointer high
+.const logoPtrLo	= byte_ba   // U pointer low
+.const logoPtrHi	= byte_bb   // U pointer high
 .const logoX		= byte_21   // B equivalent
 .const logoCount	= byte_20   // Y equivalent
 .const tmpPtrLo 	= byte_f4
@@ -284,8 +284,8 @@
 
 .const PTR2_L		= byte_be
 .const PTR2_H		= byte_bf
-.const PTR2_B2		= byte_c0
-.const PTR2_B3		= byte_c1
+.const PTR2_B2	= byte_c0
+.const PTR2_B3	= byte_c1
 
 #import "Source/asm/Constants.asm"
 
