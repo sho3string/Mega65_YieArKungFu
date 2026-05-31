@@ -70,6 +70,40 @@ Flags.N = (A & $80)
     and #%11111011
     sta Flags
 !done:
+	lda A_Register
+}
+
+.macro LDA_D_X() {
+	clc
+	lda X_L
+	adc B_Register
+	sta byte_5
+	lda X_H
+	adc A_Register
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sta A_Register
+}
+
+.macro LDY_D_Y() {
+	clc
+	lda Y_L
+	adc B_Register
+	sta byte_5
+	lda Y_H
+	adc A_Register
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sta tmp
+	iny
+	lda (byte_5),y
+	sta Y_H
+	lda tmp
+	sta Y_L
 }
 
 
@@ -152,6 +186,13 @@ Flags.N = (A & $80)
 	sta B_Register
 }
 
+.macro LDD_MEM(addr) {
+	lda addr
+	sta A_Register
+	lda addr+1
+	sta B_Register
+}
+
 .macro LDD_X() {
 	ldy #0
 	lda (X_L),y
@@ -207,6 +248,23 @@ Flags.N = (A & $80)
 
 
 // Arithmetic
+
+.macro ADDD_MEM(addr) {
+
+	/* D = D + mem16 */
+
+	clc
+
+	/* low byte (B) */
+	lda B_Register
+	adc addr+1
+	sta B_Register
+
+	/* high byte (A) */
+	lda A_Register
+	adc addr
+	sta A_Register
+}
 
 .macro ADDX(imm) {
 	pha
@@ -477,6 +535,15 @@ Flags.N = (A & $80)
 	sta U_H
 }
 
+.macro LEAU_ADD(val) {
+	clc
+    lda U_L
+    adc #<val
+    sta U_L
+    lda U_H
+    adc #>val
+    sta U_H
+}
 
 // Memory operations
 
@@ -875,20 +942,6 @@ Flags.N = (A & $80)
 }
 
 
-// FB = X + (SPRITE_RAM2 - SPRITE_RAM1), but PRESERVE A
-.macro SYNC_FB_FROM_X_PRESERVE_A() {
-    sta tmp
-    clc
-    lda X_L
-    adc #<(SPRITE_RAM2 - SPRITE_RAM1)
-    sta FB_L
-    lda X_H
-    adc #>(SPRITE_RAM2 - SPRITE_RAM1)
-    sta FB_H
-    lda tmp
-}
-
-
 // maps 6809: sta $400,x   (sprite RAM2 byte0)
 .macro STA_SPR2_0() {
     ldx X_L
@@ -991,6 +1044,26 @@ Flags.N = (A & $80)
 	LEAY_NEG_TO_TMP(off)
 	ldy #$00
 	lda (byte_5),y
+}
+
+.macro LEAX_NEG(off) {
+	sec
+	lda X_L
+	sbc #off
+	sta X_L
+	lda X_H
+	sbc #$00
+	sta X_H
+}
+
+.macro LEAX(off) {
+	clc
+	lda X_L
+	adc #off
+	sta X_L
+	lda X_H
+	adc #>off
+	sta X_H
 }
 
 .macro LDB_Y_NEG(off) {
@@ -1116,6 +1189,20 @@ Flags.N = (A & $80)
 	sta byte_6
 	pla
 	ldy #$00
+	sta (byte_5),y
+}
+
+.macro STB_U_NEG(off) {
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda B_Register
 	sta (byte_5),y
 }
 
@@ -1268,5 +1355,8 @@ Flags.N = (A & $80)
 	adc A_Register
 	sta Y_H
 }
+
+
+
 
 
