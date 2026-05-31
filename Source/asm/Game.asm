@@ -2696,7 +2696,7 @@ sub_8b30:
     // ldx #$5000
     LDX(SPRITE_RAM1)
     // lda $C1
-    LDA(WORK_RAM1+$191)	
+    LDA(WORK_RAM1+$191)		// 0x02 on real hardware, Mega65 is 0x00
     // asra
     ASRA()				// 0x01
     // bcs loc_8B8A
@@ -4536,6 +4536,7 @@ loc_9386:
 
 	// lda WORK_RAM2 + $90
 	lda WORK_RAM2 + $90
+	sta A_Register
 	lbeq loc_9415
 
 	// deca
@@ -4817,16 +4818,136 @@ loc_9415:
 	rts
 
 	
-loc_9458: // to do, part of sub_9315
-	jmp *
+loc_9458:
+	jsr sub_945c
+	rts
+	
+sub_945c:
+	/* ldu #$5050 */
+	LDU(WORK_RAM1+$20)
 
-loc_9462: // to do, part of sub_9315
-	jmp *
+	/* jsr sub_C4A8 */
+	jsr sub_c4a8
+	
+	
+loc_9462:
+	/* jsr sub_9E9C */
+	jsr sub_9e9c
+
+	/* lda word_54C8 */
+	lda WORK_RAM2+$98
+	lbne loc_9621
+
+	/* ldu #$5050 */
+	LDU(WORK_RAM1+$20)
+
+	/* lda word_54C4 */
+	lda WORK_RAM2+$94
+	bne loc_9487
+
+	/* lda $32,u */
+	ldy #$32
+	lda (U_L),y
+	beq loc_947e
+
+	/* cmpa word_51A7 */
+	cmp WORK_RAM1+$177
+
+	/* bcs loc_9487
+	   6809 BCS after CMP = A < mem
+	   6502 native BCC after CMP = A < mem */
+	bcc loc_9487
+
+
+loc_947e:
+	/* clr $33,u */
+	ldy #$33
+	lda #$00
+	sta (U_L),y
+
+	/* clr $32,u */
+	ldy #$32
+	sta (U_L),y
+
+	/* clr word_54C4+1 */
+	sta WORK_RAM2+$95
+	
+	
+loc_9487:
+	/* lda $FFED,u == lda -$13,u */
+	LDA_U_NEG($13)
+	lda A_Register
+	lbne loc_9806
+
+	/* lda word_54CE */
+	lda WORK_RAM2+$9e
+	lbne loc_c4f4
+
+	/* lda word_51A2 */
+	lda WORK_RAM1+$172
+	lbne loc_96d8
+
+	/* lda word_54C4 */
+	lda WORK_RAM2+$94
+	cmp #$02
+	beq sub_94cb
+
+	/* lda word_54C4+1 */
+	lda WORK_RAM2+$95
+	lbne loc_9684
+
+	/* lda word_54C2 */
+	lda WORK_RAM2+$92
+	lbeq loc_9b36
+
+	/* ldb word_54C2 */
+	lda WORK_RAM2+$92
+	sta B_Register
+	bne loc_94b9
+
+	/* clr $11,u */
+	ldy #$11
+	lda #$00
+	sta (U_L),y
+	
+loc_94b9:
+	/* inc word_54C0+1 */
+	inc WORK_RAM2+$91
+
+	/* jsr sub_9BBC */
+	jsr sub_9bbc
+
+	/* anda #$F0 */
+	and #$f0
+	sta A_Register
+
+	/* lbeq loc_98CF */
+	lbeq loc_98cf
+
+	/* cmpa #$40 */
+	cmp #$40
+
+	/* lbcs loc_9684
+	   6809 BCS after CMP = A < $40
+	   6502 native BCC after CMP = A < $40 */
+	lbcc loc_9684
 
 sub_94cb: // to do
 	jmp *
 	
-loc_98cf: 
+loc_9621: // to do
+	jmp *
+	
+loc_9684: // to do
+	jmp *
+	
+loc_96d8: // to do
+	jmp *
+	
+loc_9806: // to do
+	jmp *
+	
+loc_98cf: // loc_98cf is executed WORK_RAM2+$92 is 0
 	
 	/* clr $FFE2,u  == clr -$1e,u */
 	CLR_U_NEG($1e)
@@ -4869,7 +4990,7 @@ loc_98cf:
 locret_98f4:
 	rts
 
-loc_98f5: 
+loc_98f5:
 	/* jsr sub_9E4F */
 	jsr sub_9e4f
 
@@ -4909,6 +5030,7 @@ loc_9916:
 	/* sta word_51AA */
 	lda A_Register
 	sta WORK_RAM1+$17a
+	sta A_Register // preserve arcade A
 
 	/* clr $31,u */
 	ldy #$31
@@ -4921,11 +5043,10 @@ loc_9916:
 	sta B_Register
 
 	/* cmpb #3 */
+	lda B_Register
 	cmp #$03
-	bcc !b_ge_3+
-	jmp loc_992e
+	bcc loc_992e          /* 6809 BCS */
 
-!b_ge_3:
 	/* cmpa $17,u */
 	lda A_Register
 	ldy #$17
@@ -4936,7 +5057,7 @@ loc_9916:
 	lda A_Register
 	
 loc_992e:
-
+	lda A_Register
 	/* sta $17,u */
 	ldy #$17
 	sta (U_L),y
@@ -5055,20 +5176,20 @@ loc_996a:
 	rts
 	
 sub_996d:
-
+	
 	// sta 2,u
 	ldy #$02
 	sta (U_L),y
 
 	// stb 5,u
 	lda B_Register
-	ldy #$05
+	ldy #$05		
 	sta (U_L),y
 
 	// clr 3,u
 	lda #$00
 	ldy #$03
-	sta (U_L),y
+	sta (U_L),y	
 
 	// clr 7,u
 	ldy #$07
@@ -5259,6 +5380,7 @@ loc_99ce:
 
 	// jsr sub_996D
 	lda B_Register
+	
 	jsr sub_996d
 
 	CLR_U_NEG($1e) // clr -$1e,u
@@ -5305,7 +5427,7 @@ loc_9a02:
 	/* asla */	
 	lda tmp				// tmp is always zero, see 994e
 	asl
-	sta tmp                /* doubled frame index */
+	sta tmp                 /* doubled frame index */
 
 	/* leay a,y */
 	clc
@@ -5459,6 +5581,9 @@ loc_9a67:
 loc_9a89: // to do
 	jmp *
 	
+sub_9aac: // to do
+	jmp *
+	
 loc_9ade: // to do
 	jmp *
 
@@ -5591,13 +5716,22 @@ loc_9c09:
 	rts
 	
 sub_9c0d:
+	/* ldb $35,u */
 	ldy #$35
 	lda (U_L),y
+	sta B_Register
+
+	/* cmpb #$0f */
 	cmp #$0f
-	bne !+
+	bne locret_9c18
+
+loc_9c16:
+	/* lda #5 */
 	lda #$05
 	sta A_Register
-!:
+
+locret_9c18:
+	lda A_Register
 	rts
 
 
@@ -5904,6 +6038,8 @@ loc_9cb2:
 
 	/* leax d,x */
 	
+	// x is supposed to point to e840, fd41, fd9e.
+	
 	clc
 	lda X_L
 	adc B_Register
@@ -5932,7 +6068,7 @@ Write player sprite frames to sprite ram
 loc_9ccc:
 	/* ldb ,x+ */ /* x = e840 */
 	ldy #$00
-	lda (X_L),y	
+	lda (X_L),y		// should be 0x8 but we get 0x0 ( explains the problem ). X_L is pointing to C4D0 instead of  <dbg>Ma03e :0000A03E:08400040080001400B0002400B400340
 	INC16(X_L, X_H)
 
 	/* stb $E,y */
@@ -5970,12 +6106,133 @@ loc_9ce4:
     rts
 
 	
-sub_9cf0: // to do
-	jmp *
+sub_9cf0:
+	/* ldb word_54C2+1 */
+	lda WORK_RAM2+$93
+	sta B_Register
+	lbeq loc_9d39
+
+	/* ldb word_54C4 */
+	lda WORK_RAM2+$94
+	sta B_Register
+
+	/* cmpb #2 */
+	cmp #$02
+	lbeq loc_9d39
+
+	/* jsr sub_9BBC */
+	jsr sub_9bbc
+
+	/* tfr a,b */
+	sta A_Register
+	sta B_Register
+
+	/* anda #$30 */
+	and #$30
+	sta A_Register
+	bne loc_9d39
+
+	/* cmpb #3 */
+	lda B_Register
+	cmp #$03
+
+	/* 6809 BCC after CMP = B >= 3
+	   6502 native BCS after CMP = B >= 3 */
+	bcs loc_9d39
+
+	/* ldb word_54CE */
+	lda WORK_RAM2+$9e
+	sta B_Register
+	beq loc_9d13
+
+	/* ldb word_54C2+1 */
+	lda WORK_RAM2+$93
+	sta B_Register
+	bne loc_9d39
 	
-loc_9d13: // to do
-	jmp *
+loc_9d13:
+	/* ldb -$10,u */
+	LDB_U_NEG($10)
+
+	/* cmpb #2 */
+	lda B_Register
+	cmp #$02
+	beq loc_9d37
+
+	/* ldb $19,u */
+	ldy #$19
+	lda (U_L),y
+	sta B_Register
+
+	/* cmpb #3 */
+	cmp #$03
+
+	/* 6809 BCC after CMP = B >= 3
+	   6502 native BCS after CMP = B >= 3 */
+	bcs loc_9d2d
+
+	/* ldb word_54C2+1 */
+	lda WORK_RAM2+$93
+	sta B_Register
+	bne loc_9d37
+
+	/* ldb word_5430+1 */
+	lda WORK_RAM2+$01
+	sta B_Register
+
+	/* cmpb word_EA1C+1 */
+	cmp ea1c+1
+	beq loc_9d37
+
+
+loc_9d2d:
+	/* ldb $11,u */
+	ldy #$11
+	lda (U_L),y
+	sta B_Register
+
+	/* eorb #1 */
+	eor #$01
+	sta B_Register
+
+	/* stb $11,u */
+	sta (U_L),y
+
+	/* bra loc_9D39 */
+	bra loc_9d39
 	
+loc_9d37:
+	/* clr -$10,u */
+	CLR_U_NEG($10)
+
+
+loc_9d39:
+	/* lda $FFE9,u == lda -$17,u */
+	LDA_U_NEG($17)
+	lda A_Register
+
+	/* cmpa #1 */
+	cmp #$01
+	bne loc_9d46
+
+	/* lda $FFE5,u == lda -$1b,u */
+	LDA_U_NEG($1b)
+	lda A_Register
+
+	/* sta $11,u */
+	ldy #$11
+	sta (U_L),y
+	
+loc_9d46:
+	/* clra */
+	CLRA()
+
+	/* jsr sub_9C0D */
+	jsr sub_9c0d
+
+	/* ldb word_54C2+1 */
+	lda WORK_RAM2+$93
+	sta B_Register
 	
 sub_9d4d:
 	ldy #$18
@@ -5994,12 +6251,20 @@ sub_9d4d:
 loc_9d5c:
 	BR_IF_U_NE(WORK_RAM1+$20, loc_9d66)
 	LDA_U_NEG($8)	// lda     -8,u
+	lda A_Register
 	lbne loc_9ddc
 	
-
+	// doesn't go here when U = c090
+	
+	// 1st pass. 90C0 or c090 - correct
+	// 2nd pass. 90C0 or c090 - correct
+	// 3rd pass. 90C0 or c090 - not correct, should be c050.
+	
+	// addess is not being changed.
+	
 loc_9d66:
-	ldy #$05			
-	lda (U_L),y          /* ldb 5,u */
+	ldy #$05
+	lda (U_L),y          /* ldb 5,u */  // potentially loads 0xe0 when u points to 0x5050
 	sta B_Register
 	
 	ldy #$08
@@ -6103,8 +6368,8 @@ loc_9daf:
 	bra loc_9d96
 	
 loc_9dba:
-	ldy #$04
-	lda (U_L),y
+	ldy #$04										// 5055 = 0xe0
+	lda (U_L),y									// should be A0, but value is 0x30 because U_L is pointing to c030 instead of c090
 	sta B_Register
 
 	ldy #$02
@@ -6112,14 +6377,14 @@ loc_9dba:
 	sbc (U_L),y
 	sta B_Register
 
-	BR_IF_U_NE(WORK_RAM1+$20, loc_9dc8)
+	BR_IF_U_NE(WORK_RAM1+$20, loc_9dc8)			// should jump tp 9dc8
 
 	lda B_Register
 	cmp #$d1
 	bcs loc_9dd2
 	
 loc_9dc8:
-	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)
+	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)			// we should end up here
 
 	lda B_Register
 	cmp #$11
@@ -6138,7 +6403,7 @@ loc_9dd8:
 	lda #$d0
 	sta B_Register
 
-loc_9dda:
+loc_9dda:											// then here.
 	ldy #$04
 	lda B_Register
 	sta (U_L),y
@@ -6305,8 +6570,155 @@ loc_9e3a:
 
 	rts
 	
-sub_9e4f: 
-	jmp *
+sub_9e4f:
+	/* ldu #$5050 */
+	LDU(WORK_RAM1+$20)
+
+	/* ldx #$E746 */
+	LDX(e746)
+
+	/* ldy #$E739 */
+	LDY(e739)
+
+	/* lda word_54C2 */
+	lda WORK_RAM2+$92
+	sta A_Register
+
+	/* ldb word_54C2+1 */
+	lda WORK_RAM2+$93
+	sta B_Register
+	beq loc_9e6e
+
+	/* pshs x */
+	lda X_L
+	pha
+	lda X_H
+	pha
+
+	/* ldx #$E73D */
+	LDX(e73d)
+
+	/* lda a,x */
+	ldy #$00
+	clc
+	lda X_L
+	adc A_Register
+	sta byte_5
+	lda X_H
+	adc #$00
+	sta byte_6
+
+	lda (byte_5),y
+	sta A_Register
+
+	/* puls x */
+	pla
+	sta X_H
+	pla
+	sta X_L
+
+	/* ldy #$E73B */
+	LDY(e73b)
+
+
+loc_9e6e:
+	/* tst word_54CE */
+	lda WORK_RAM2+$9e
+	bne loc_9e78
+
+	/* tst word_54C4+1 */
+	lda WORK_RAM2+$95
+	beq loc_9e86
+
+
+loc_9e78:
+	/* cmpa ,y */
+	ldy #$00
+	lda A_Register
+	cmp (Y_L),y
+	bne loc_9e80
+
+	/* lda 1,y */
+	iny
+	lda (Y_L),y
+	sta A_Register
+	bra loc_9e86
+
+
+loc_9e80:
+	/* cmpa 1,y */
+	ldy #$01
+	lda A_Register
+	cmp (Y_L),y
+	bne loc_9e86
+
+	/* lda ,y */
+	ldy #$00
+	lda (Y_L),y
+	sta A_Register
+
+
+loc_9e86:
+	/* asla */
+	lda A_Register
+	asl
+	sta A_Register
+
+	/* leax a,x */
+	clc
+	lda X_L
+	adc A_Register
+	sta X_L
+	lda X_H
+	adc #$00
+	sta X_H
+
+	/* ldd ,x */
+	LDD_X()
+
+	/* ldy #$51A0 */
+	LDY(WORK_RAM1+$170)
+
+	/* std $E,y */
+	ldy #$0e
+	lda A_Register
+	sta (Y_L),y
+	iny
+	lda B_Register
+	sta (Y_L),y
+
+
+loc_9e91:
+	/* lda 4,u */
+	ldy #$04
+	lda (U_L),y
+
+	/* adda #8 */
+	clc
+	adc #$08
+
+	/* sta 4,y */
+	ldy #$04
+	sta (Y_L),y
+
+	/* lda #$10 */
+	lda #$10
+
+	/* sta 6,y */
+	ldy #$06
+	sta (Y_L),y
+
+	rts
+	
+sub_9e9c:
+	/* ldy #$51A0 */
+	LDY(WORK_RAM1+$170)
+
+	/* ldu #$5050 */
+	LDU(WORK_RAM1+$20)
+
+	/* bra loc_9E91 */
+	bra loc_9e91
 	
 /*******************
 * Draw Energy Bars *
@@ -6355,7 +6767,7 @@ loc_9ec8:
 
 
 loc_9ed7:
-	jsr sub_a668 			// energy bars.
+	jsr sub_a668 			//  energy bars.
 	lda WORK_RAM2+$95      // word_54c4+1
 	bne loc_9ee2
 	CLR_Y($29)				// $29,y
@@ -6984,7 +7396,7 @@ sub_a270:
 	LDY(WORK_RAM1+$60)
 	
 	// lda word_5430+1
-	lda WORK_RAM2 + $01		// enemy name index, 0x2 for nucha
+	lda WORK_RAM2 + $01	// enemy name index, 0x2 for nucha
 	// cmpa word_EA1C+1
 	cmp ea1c+1				// is enemy feedle ?
 	lbne loc_a2b4			// nope
@@ -7979,7 +8391,7 @@ loc_a915:
 	lda WORK_RAM2+$d7      /* word_5506+1 */
 	sta tmp
 	LDU(f368)              /* table base */
-	LDX(f492)          	  /* required by later code */
+	LDX(f492)          /* required by later code */
 	lda tmp
 	asl
 	tay
@@ -8996,7 +9408,7 @@ loc_c183:
 	ADDY($0010)
 	bra sub_c173
 	
-sub_c188:
+sub_c188:					// likely incorrect - debug this
 	ldy #$12
 	lda (Y_L),y			// reads 0x1 from 0x50b2
 	
@@ -9463,6 +9875,97 @@ loc_c3e7:
 
 locret_c3f6:
 	lda A_Register
+	rts
+	
+sub_c4a8:
+	/* lda word_54C4 */
+	lda WORK_RAM2+$94
+	lbeq loc_c4f0
+
+	/* lda word_503D */
+	lda WORK_RAM1+$0d
+	lbne loc_c4f0
+
+	/* inca */
+	clc
+	adc #$01
+
+	/* sta $2A,u */
+	ldy #$2a
+	sta (U_L),y
+
+	/* lda $FFE9,u */
+	LDA_U_NEG($17)
+	lda A_Register
+	lbne locret_c4f3
+
+	/* lda word_54C8 */
+	lda WORK_RAM2+$98
+	lbeq locret_c4f3
+
+	/* inc $FFE9,u */
+	INC_U_NEG($17)
+
+	/* lda word_5515+1 */
+	lda WORK_RAM2+$e6
+	lbne loc_c4e7
+
+	/* lda $22,u */
+	ldy #$22
+	lda (U_L),y
+	lbeq loc_c4e7
+
+	/* clr word_54C4 */
+	lda #$00
+	sta WORK_RAM2+$94
+
+	/* inc $FFE9,u */
+	INC_U_NEG($17)
+
+	/* ldd $FFE7,u */
+	LDD_U_NEG($19)
+
+	/* stb word_54C2 */
+	lda B_Register
+	sta WORK_RAM2+$92
+
+	/* lda $17,u */
+	ldy #$17
+	lda (U_L),y
+	pha
+
+	/* jsr sub_9AAC */
+	jsr sub_9aac
+
+	/* puls a */
+	pla
+
+	/* lda $17,u */
+	ldy #$17
+	lda (U_L),y
+	rts
+	
+
+loc_c4e7:
+	/* lda $11,u */
+	ldy #$11
+	lda (U_L),y
+
+	/* eora #1 */
+	eor #$01
+
+	/* sta $FFE5,u == sta -$1b,u */
+	sta A_Register
+	STA_U_NEG($1b)
+
+	rts
+
+
+loc_c4f0:
+	/* clr $FFE9,u == clr -$17,u */
+	CLR_U_NEG($17)
+
+locret_c4f3:
 	rts
 	
 loc_c4f4: // to to
