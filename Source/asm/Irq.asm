@@ -33,7 +33,19 @@ noIrq:
     pla
     rti
 	
-//nmi_handler:
-//    rti
+nmi_handler:
+	pha
+	phx
+	phy
+	phz
+
+	bit ciab_d	// Acknowledge the NMI
+	jsr loc_c78e
+	
+	plz
+	ply
+	plx
+	pla
+	rti
 
 
