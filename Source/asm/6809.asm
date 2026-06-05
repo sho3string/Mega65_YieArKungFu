@@ -1131,6 +1131,48 @@ Flags.N = (A & $80)
 	pla
 }
 
+.macro LDD_U_NEG(off) {
+	pha
+
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda (byte_5),y
+	sta A_Register
+	iny
+	lda (byte_5),y
+	sta B_Register
+
+	/* update emulated flags from 16-bit D result, C unchanged */
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	lda A_Register
+	ora B_Register
+	bne !not_zero+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!not_zero:
+
+	lda A_Register
+	and #%10000000
+	beq !not_negative+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!not_negative:
+
+	pla
+}
+
 .macro LDB_U_NEG(off) {
 	pha
 	sec
@@ -1315,6 +1357,16 @@ Flags.N = (A & $80)
 	pla
 }
 
+.macro STU32_MEM(addr) {
+	lda U_L
+	sta addr
+	lda U_H
+	sta addr+1
+	lda U_L+2
+	sta addr+2
+	lda U_L+3
+	sta addr+3
+}
 .macro ADD32_IMM(ptrLo, val) {
 	pha
 	clc
