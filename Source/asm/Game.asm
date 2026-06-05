@@ -1228,6 +1228,7 @@ sub_86f6:
     jsr loc_c6a6
 	//LDU(e172)
 	LD32_IMM(U_L,PLAYFIELD)
+shithead:
     lda WORK_RAM2+$01       // word_5430+1
     cmp #5
     bcc loc_8710
@@ -1246,10 +1247,7 @@ sub_86f6:
 **********************************************/
 loc_8710:
 	// stu word_5200
-	lda U_L
-	sta WORK_RAM1+$1D0
-	lda U_H
-	sta WORK_RAM1+$1D1
+	STU32_MEM(WORK_RAM1+$1d0) // Store a 32 bit address, playfield is in higher mem.
 	
 	lda #0
     sta byte_colidx
@@ -5486,8 +5484,6 @@ loc_9a02:
 loc_9a2c:
 	// lda -$10,u
 	LDA_U_NEG($10)
-	lda A_Register
-
 	// cmpa #2
 	cmp #$02
 	beq loc_9a3a
@@ -5496,6 +5492,7 @@ loc_9a2c:
 	/* lda ,y+ */
 	ldy #$00
 	lda (Y_L),y
+	sta A_Register
 	INC16(Y_L, Y_H)
 
 	// cmpa #2
@@ -5507,9 +5504,15 @@ loc_9a3a:
 	// clr -$10,u
 	CLR_U_NEG($10)
 loc_9a3c:
-	// ldb #$80
+	/* ldb #$80 */
 	lda #$80
 	sta B_Register
+
+	/* stb $B,u */
+	ldy #$0b
+	sta (U_L),y
+
+	/* bra loc_9A44 */
 	bra loc_9a44
 
 loc_9a42:
@@ -5986,7 +5989,7 @@ loc_9c7b:
 	adc A_Register
 	sta Y_H
 
-	jmp loc_9c6e
+	lbra loc_9c6e
 
 
 loc_9caf:
@@ -6367,9 +6370,15 @@ loc_9daf:
 	sta (U_L),y
 	bra loc_9d96
 	
+/*
+	1st pass - 5090 / c090 = a0
+	2nd pass - 5090
+	3rd pass - 5090 seems messed up
+
+*/
 loc_9dba:
 	ldy #$04										// 5055 = 0xe0
-	lda (U_L),y									// should be A0, but value is 0x30 because U_L is pointing to c030 instead of c090
+	lda (U_L),y									// should be A0, but is 0x30 because U_L is pointing to c030 instead of c090
 	sta B_Register
 
 	ldy #$02
@@ -6384,7 +6393,7 @@ loc_9dba:
 	bcs loc_9dd2
 	
 loc_9dc8:
-	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)			// we should end up here
+	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)			// we end up here
 
 	lda B_Register
 	cmp #$11
