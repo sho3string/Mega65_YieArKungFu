@@ -6,8 +6,8 @@
 .const TRANSPARENT 			= $80
 
 // sprite queue variables
-.const SPRITE_MAX				= 23	 									// Maximum # of sprites to queue
-.const PIXIE_MAX				= 180
+.const SPRITE_MAX			= 23	 									// Maximum # of sprites to queue
+.const PIXIE_MAX			= 180
 
 /*
 On arcade.
@@ -39,6 +39,7 @@ byte 1 - character code LSB
 //.const LOADADDR			= $40000			// use spare ram to load stuff into.
 .const GRAPHMEM  			= $30000 			// this will be our character generator at bank 2
 .const PLAYFIELD			= $20000			// Playfield data at bank1
+.const HISCORE			= PLAYFIELD + $5c0 // 0x205c0
 .const TILE_OFFSET		= GRAPHMEM/64
 //.const MEMBANK			= LOADADDR>>16		// 0x40000 >> 16 = 4
 .const TAIL_OFF			= CHARS_WIDE*2
@@ -49,27 +50,35 @@ byte 1 - character code LSB
 .const ciaa_d 			= $dc0d
 .const ciaa_timer_a		= $dd0e
 .const ciab_d 			= $dd0d
-.const vicii_rcl 			= $d012
-.const vicii_rch 			= $d011
-.const vicii_irq			= $d019
+.const vicii_rcl 		= $d012
+.const vicii_rch 		= $d011
+.const vicii_irq		= $d019
 
 
 // 6809 registers
-.const Y_L					= $aa
-.const Y_H					= $ab
-.const U_L					= $ba
-.const U_H					= $bb
-.const B_Register			= $f2
+.const Y_L				= $aa
+.const Y_H				= $ab
+.const U_L				= $ba
+.const U_H				= $bb
+.const B_Register		= $f2
 .const zp_cmd_param		= $f4
-.const X_L					= $f5
-.const X_H					= $f6
-.const A_Register			= $f9
-.const Flags				= $fa
-.const tmp					= $fb
+.const X_L				= $f5
+.const X_H				= $f6
+.const A_Register		= $f9
+.const Flags			= $fa
+.const tmp				= $fb
 .const tmp2				= $fc
 .const tmp3				= $fd
-.const Y_Register			= $fe
+.const Y_Register		= $fe
 
+// Low-RAM staging buffer for one high-score entry
+
+.const HSRC0  				= $40
+.const HSRC1 				= $41
+.const HSRC2 				= $42
+.const HSRC3 				= $43
+
+.const hiscore_row_buf = WORK_RAM2+$120   /* 5550 */
 
 // labels
 
