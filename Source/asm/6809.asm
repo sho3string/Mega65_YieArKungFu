@@ -1357,6 +1357,13 @@ Flags.N = (A & $80)
 	pla
 }
 
+
+/* Reads A from 32-bit pointer ptrLo..ptrLo+3 */
+.macro LD32_READ_A(ptrLo) {
+	ldz #$00
+	lda ((ptrLo)),z
+}
+
 .macro STU32_MEM(addr) {
 	lda U_L
 	sta addr
@@ -1367,6 +1374,7 @@ Flags.N = (A & $80)
 	lda U_L+3
 	sta addr+3
 }
+
 .macro ADD32_IMM(ptrLo, val) {
 	pha
 	clc
