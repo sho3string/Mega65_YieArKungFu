@@ -1071,6 +1071,7 @@ sub_85b3: // to do
 .const zp_glyph_index	= byte_6
 
 
+/*
 loc_867e:
     lda #$1f
     sta B_Register
@@ -1134,9 +1135,9 @@ loc_869d:
 	ADDX($1a)
 	ADDU(4)
 
-/****************************
-*Player name high score loop*
-*****************************/
+//****************************
+//Player name high score loop*
+//*****************************
     lda #10
     sta Y_L
     lda #0
@@ -1159,14 +1160,14 @@ loc_86b8:
     sta X_H
     //ADDX($80) // advance two rows.
 	
-	/*
-	translated_row_step = $40 + (RRB_Tail_words * 2)
-                    = $40 + $F4
-                    = $134
-					
-	translated_2row_step = 2 * $134 = $268
 	
-	*/
+	//translated_row_step = $40 + (RRB_Tail_words * 2)
+   //                 = $40 + $F4
+   //                 = $134
+	//				
+	//translated_2row_step = 2 * $134 = $268
+	
+
 	
 	ADDX(($40 + (RRB_Tail_words * 2))<<1) // #$268
     lda X_L
@@ -1187,7 +1188,124 @@ loc_86b8:
     dec WORK_RAM1+$1cf  //byte_ff
     lbne loc_8692
     rts
+*/
+
+loc_867e:
+	lda #$1f
+	sta B_Register
+	jsr sub_80a1
+
+	LDX(ArcadeToMegaTextByte($59d1))
+
+	lda X_L
+	sta byte_5
+	lda X_H
+	sta byte_6
+
+	/* word_5200 = offset into HISCORE table */
+	lda #$00
+	sta WORK_RAM1+$1d0
+	sta WORK_RAM1+$1d1
+
+	lda #$0a
+	sta WORK_RAM1+$1cf
 	
+loc_8692:
+	/* Copy one 14-byte high-score row from high RAM to low staging buffer */
+	LD32_BASE_PLUS_16(HSRC0, HISCORE, WORK_RAM1+$1d0)
+
+	LDU(hiscore_row_buf)
+
+	lda #$0e
+	sta byte_48
+
+!copy_hiscore_row:
+	LD32_READ_A(HSRC0)
+
+	ldy #$00
+	sta (U_L),y
+
+	ADD32_IMM(HSRC0, 1)
+	INC16(U_L, U_H)
+
+	dec byte_48
+	bne !copy_hiscore_row-
+
+	/* Restore screen pointer */
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+
+	/* U = staged high-score row */
+	LDU(hiscore_row_buf)
+
+	jsr sub_88c5
+	jsr sub_8922
+
+loc_869d:
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+
+	LDU(hiscore_row_buf)
+
+	ADDU(1)
+	ADDX($12)
+	jsr sub_890f
+
+
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+
+	LDU(hiscore_row_buf)
+
+	ADDX($1a)
+	ADDU(4)
+	
+/****************************
+* Player name high score loop
+*****************************/
+	lda #10
+	sta Y_L
+	lda #0
+	sta Y_H
+
+loc_86b8:
+	ldy #0
+	lda (U_L),y
+	sta (X_L),y
+
+	ADDU(1)
+
+	INC16(X_L, X_H)
+	INC16(X_L, X_H)
+
+	dec Y_L
+	bne loc_86b8
+
+
+	lda byte_5
+	sta X_L
+	lda byte_6
+	sta X_H
+
+	ADDX(($40 + (RRB_Tail_words * 2))<<1)
+
+	lda X_L
+	sta byte_5
+	lda X_H
+	sta byte_6
+
+	/* next high-score row: 14 bytes */
+	ADD16_MEM(WORK_RAM1+$1d0, $0e)
+
+	dec WORK_RAM1+$1cf
+	lbne loc_8692
+	rts
 
 /***********************************************************
 * sub_86D7 – Initialise High Score Table                   *
@@ -1211,6 +1329,7 @@ sub_86d7:
 * for display at top of screen during gameplay. *
 *************************************************/
 
+/*
 loc_86e9:
 	lda data_5520+0	    // word_551F+1
 	sta WORK_RAM1+$1EC	 // word_521C
@@ -1218,6 +1337,21 @@ loc_86e9:
 	sta WORK_RAM1+$1ED	// word_521C+1
 	lda data_5520+2
 	sta WORK_RAM1+$1EE	// word_521C+2
+	rts
+*/
+loc_86e9:
+	LD32_IMM(HSRC0, HISCORE)
+	LD32_READ_A(HSRC0)
+	sta WORK_RAM1+$1ec
+
+	ADD32_IMM(HSRC0, 1)
+	LD32_READ_A(HSRC0)
+	sta WORK_RAM1+$1ed
+
+	ADD32_IMM(HSRC0, 1)
+	LD32_READ_A(HSRC0)
+	sta WORK_RAM1+$1ee
+	
 	rts
 
 	
@@ -1228,7 +1362,7 @@ sub_86f6:
     jsr loc_c6a6
 	//LDU(e172)
 	LD32_IMM(U_L,PLAYFIELD)
-shithead:
+
     lda WORK_RAM2+$01       // word_5430+1
     cmp #5
     bcc loc_8710
@@ -3634,7 +3768,7 @@ loc_8e3a:
 	//LDX(SCREEN_BASE+(RRB_Tail_words*2*($4a3>>arcadeRowSize))+$4a3-1)		// $5ca3
 	LDX(ArcadeToMegaTextByte($5ca3))
 	LDU(WORK_RAM2)	// $5430
-	jsr sub_890f	// prints 1 for stage for stage 1.
+	jsr sub_890f		// prints 1 for stage for stage 1.
 	lda #$20
 	sta WORK_RAM1+$1cd  //byte_fd
 	inc WORK_RAM1+$197  //byte_c7
