@@ -1249,8 +1249,17 @@ Flags.N = (A & $80)
 }
 
 .macro CLR_U_NEG(off) {
-	CLRA()
-	STA_U_NEG(off)
+	sec
+	lda U_L
+	sbc #off
+	sta byte_5
+	lda U_H
+	sbc #$00
+	sta byte_6
+
+	ldy #$00
+	lda #$00
+	sta (byte_5),y
 }
 
 .macro CLR_Y(off) {
