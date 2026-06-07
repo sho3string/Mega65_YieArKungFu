@@ -1351,7 +1351,6 @@ loc_86e9:
 	ADD32_IMM(HSRC0, 1)
 	LD32_READ_A(HSRC0)
 	sta WORK_RAM1+$1ee
-	
 	rts
 
 	
@@ -4809,9 +4808,10 @@ loc_93f7:
 	lda #$00
 	sta WORK_RAM1 + $01
 	inc  WORK_RAM1 + $00
-	bne loc_93eb
+	bra loc_93eb
 
-loc_93ff: // doesn't get called 
+loc_93ff:
+
 	inc WORK_RAM2 + $90
 	lda #$00
 	sta  WORK_RAM1 + $00
@@ -4823,6 +4823,7 @@ loc_93ff: // doesn't get called
 	jsr sub_9e4f
 
 	lda #$00
+	sta A_Register
 	jsr sub_9979
 	rts	
 	
@@ -4905,7 +4906,7 @@ loc_9415:
 
 	// clra
 	CLRA()
-
+	
 	// jsr sub_9979
 	jsr sub_9979
 
@@ -5117,6 +5118,7 @@ loc_98cf: // loc_98cf is executed WORK_RAM2+$92 is 0
 	beq locret_98f4
 
 	/* jmp sub_9979 */
+	sta A_Register
 	jmp sub_9979
 
 locret_98f4:
@@ -5251,7 +5253,6 @@ loc_993b:
 	sta B_Register
 
 	/* bsr sub_9953 */
-	lda A_Register
 	jsr sub_9953
 
 	/* jsr sub_996D */
@@ -5264,10 +5265,11 @@ loc_993b:
 	sta A_Register
 
 	/* bra sub_9979 */
-	jmp sub_9979
+	lbra sub_9979
 
 sub_9953:
 	/* sta 2,u */
+	lda A_Register
 	ldy #$02
 	sta (U_L),y
 
@@ -5308,7 +5310,7 @@ loc_996a:
 	rts
 	
 sub_996d:
-	
+	lda A_Register
 	// sta 2,u
 	ldy #$02
 	sta (U_L),y
@@ -5333,25 +5335,24 @@ sub_996d:
 locret_9978:
 	rts
 	
-sub_9979:
-	// cmpa word_5069
-	cmp WORK_RAM1 + $39 // player moved ? 0x1 - left, 0x2 - right, 0x3 - jump, 0xA - punch
-	beq loc_9986		// hasn't moved	
+sub_9979: // fix this, caller is probably wrong. check this
+	lda A_Register
 
-	// cmpa #9
-	cmp #$09			// Upforward Punch attack ? ( Written at 0x9992 )
-	bcs loc_9986		// Upforward Punch attack
+	cmp WORK_RAM1+$39
+	beq loc_9986
 
-	// ldb #$F0
-	
-	pha
+	cmp #$09
+	bcs loc_9986          /* 6809 BCC */
+
 	lda #$f0
 	sta B_Register
 	ldy #$0b
 	sta (U_L),y
-	pla
+
+
 
 loc_9986:
+	lda A_Register
 	/* ldb word_54CE -- preserve A */
 	pha
 	lda WORK_RAM2+$9e
@@ -5362,11 +5363,13 @@ loc_9986:
 	beq loc_998f
 
 	/* cmpa #8 -- compare original A */
+	lda A_Register
 	cmp #$08
 	bcc locret_9978
 
 loc_998f:
-	/* sta word_5069 -- original A */
+	/* sta word_5069 */
+	lda A_Register
 	sta WORK_RAM1+$39
 
 sub_9992:
@@ -6132,7 +6135,7 @@ loc_9caf:
 loc_9cb2:
 	/* lda $D,u */
 	ldy #$0d
-	lda (U_L),y
+	lda (U_L),y // should be reading 0x20 after 8 passes.
 
 	/* adda $B,u */
 	ldy #$0b
@@ -6232,6 +6235,7 @@ loc_9ccc:
 
 loc_9cda:
 	BR_IF_U_NE(WORK_RAM1+$20, locret_9ce3)
+	lda #$00
 	sta WORK_RAM1+$1c
 locret_9ce3:
     rts
@@ -6391,17 +6395,11 @@ loc_9d5c:
 	lda A_Register
 	lbne loc_9ddc
 	
-	// doesn't go here when U = c090
-	
-	// 1st pass. 90C0 or c090 - correct
-	// 2nd pass. 90C0 or c090 - correct
-	// 3rd pass. 90C0 or c090 - not correct, should be c050.
-	
-	// addess is not being changed.
+
 	
 loc_9d66:
 	ldy #$05
-	lda (U_L),y          /* ldb 5,u */  // potentially loads 0xe0 when u points to 0x5050
+	lda (U_L),y          /* ldb 5,u */  
 	sta B_Register
 	
 	ldy #$08
@@ -6511,8 +6509,8 @@ loc_9daf:
 
 */
 loc_9dba:
-	ldy #$04										// 5055 = 0xe0
-	lda (U_L),y									// should be A0, but is 0x30 because U_L is pointing to c030 instead of c090
+	ldy #$04										
+	lda (U_L),y									
 	sta B_Register
 
 	ldy #$02
@@ -6520,14 +6518,14 @@ loc_9dba:
 	sbc (U_L),y
 	sta B_Register
 
-	BR_IF_U_NE(WORK_RAM1+$20, loc_9dc8)			// should jump tp 9dc8
+	BR_IF_U_NE(WORK_RAM1+$20, loc_9dc8)	
 
 	lda B_Register
 	cmp #$d1
 	bcs loc_9dd2
 	
 loc_9dc8:
-	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)			// we end up here
+	BR_IF_U_NE(WORK_RAM1+$20, loc_9dda)	
 
 	lda B_Register
 	cmp #$11
@@ -6546,10 +6544,9 @@ loc_9dd8:
 	lda #$d0
 	sta B_Register
 
-loc_9dda:											// then here.
+loc_9dda:											
 	ldy #$04
 	lda B_Register
-	sta (U_L),y
 
 	
 loc_9ddc:
@@ -9998,7 +9995,7 @@ loc_c3e7:
 	lda B_Register
 	beq locret_c3f6
 
-	// pushes 5120 on arcade. Mega b120 ( correct ).
+	// pushes 5120 on arcade. Mega c120 ( correct ).
 	lda X_L
 	pha
 	lda X_H
