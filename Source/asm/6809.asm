@@ -1097,7 +1097,6 @@ Flags.N = (A & $80)
 
 
 .macro LDA_U_NEG(off) {
-	pha
 	sec
 	lda U_L
 	sbc #off
@@ -1105,6 +1104,7 @@ Flags.N = (A & $80)
 	lda U_H
 	sbc #$00
 	sta byte_6
+
 	ldy #$00
 	lda (byte_5),y
 	sta A_Register
@@ -1116,19 +1116,22 @@ Flags.N = (A & $80)
 	sta Flags
 
 	txa
-	bne !+
+	bne !not_zero+
 	lda Flags
 	ora #%00000010
 	sta Flags
-!:
+!not_zero:
+
 	txa
 	and #%10000000
-	beq !+
+	beq !not_neg+
 	lda Flags
 	ora #%00000100
 	sta Flags
-!:	
-	pla
+!not_neg:
+
+	/* IMPORTANT: return with native A matching 6809 A */
+	lda A_Register
 }
 
 .macro LDD_U_NEG(off) {
@@ -1174,7 +1177,6 @@ Flags.N = (A & $80)
 }
 
 .macro LDB_U_NEG(off) {
-	pha
 	sec
 	lda U_L
 	sbc #off
@@ -1182,10 +1184,34 @@ Flags.N = (A & $80)
 	lda U_H
 	sbc #$00
 	sta byte_6
+
 	ldy #$00
 	lda (byte_5),y
 	sta B_Register
-	pla
+
+	/* optional: update Z/N flags from B */
+	tax
+	lda Flags
+	and #%00000001
+	sta Flags
+
+	txa
+	bne !not_zero+
+	lda Flags
+	ora #%00000010
+	sta Flags
+!not_zero:
+
+	txa
+	and #%10000000
+	beq !not_neg+
+	lda Flags
+	ora #%00000100
+	sta Flags
+!not_neg:
+
+	/* return native A = emulated B */
+	lda B_Register
 }
 
 .macro STA_Y_NEG(off) {
