@@ -6,7 +6,7 @@
 .const TRANSPARENT 			= $80
 
 // sprite queue variables
-.const SPRITE_MAX			= 23	 									// Maximum # of sprites to queue
+.const SPRITE_MAX			= 27	 									// Maximum # of sprites to queue
 .const PIXIE_MAX			= 180
 
 /*
@@ -21,29 +21,29 @@ byte 1 - character code LSB
 
 // - work ram 0x5000 - 0x57ff
 .const SPRITE_RAM1		= $C000
-.const WORK_RAM1			= $C030
-.const CMD_QUEUE			= $C2C0
+.const WORK_RAM1		= $C030
+.const CMD_QUEUE		= $C2C0
 .const SPRITE_RAM2		= $C400
-.const WORK_RAM2			= $C430
+.const WORK_RAM2		= $C430
 .const SCREEN_BASE		= $2400	 /* background 8x8 screen ram - physcially on screen top left at 5880*/
 .const ARCADE_VRAM_BASE	= $5800  /* Arcade character ram */
-.const SCREEN_WIDTH 		= 256	 /* arcade is 256 - 32 characters visible */
+.const SCREEN_WIDTH 	= 256	 /* arcade is 256 - 32 characters visible */
 .const SCREEN_HEIGHT 	= 256	 /* arcade is 224 - 28 characters visible, however visble portion starts at 0x5880, non visible at 0x5800 to 0x587f */
 .const CHARS_WIDE 		= (SCREEN_WIDTH / 8) 				// 32 characters.
 .const CHARS_HIGH 		= (SCREEN_HEIGHT / 8)				// 32 characters, 28 visible.
-.const TOTAL_CHARS  		= CHARS_WIDE + RRB_Tail_words   
+.const TOTAL_CHARS  	= CHARS_WIDE + RRB_Tail_words   
 .const LINESTEP_BYTES 	= TOTAL_CHARS * 2 
-.const LOGICAL_WIDTH		= (CHARS_WIDE * 2) + (RRB_Tail_words * 2) // 64 for characters + 96 for pixies. 2 bytes for each character and pixie.
-.const ROW_STRIDE			= $40 + (RRB_Tail_words * 2)
-.const COLOR_RAM			= $FF80000 
-//.const LOADADDR			= $40000			// use spare ram to load stuff into.
-.const GRAPHMEM  			= $30000 			// this will be our character generator at bank 2
-.const PLAYFIELD			= $20000			// Playfield data at bank1
+.const LOGICAL_WIDTH	= (CHARS_WIDE * 2) + (RRB_Tail_words * 2) // 64 for characters + 96 for pixies. 2 bytes for each character and pixie.
+.const ROW_STRIDE		= $40 + (RRB_Tail_words * 2)
+.const COLOR_RAM		= $FF80000 
+//.const LOADADDR		= $40000			// use spare ram to load stuff into.
+.const GRAPHMEM  		= $30000 			// this will be our character generator at bank 2
+.const PLAYFIELD		= $20000			// Playfield data at bank1
 .const HISCORE			= PLAYFIELD + $5c0 // 0x205c0
 .const TILE_OFFSET		= GRAPHMEM/64
-//.const MEMBANK			= LOADADDR>>16		// 0x40000 >> 16 = 4
+//.const MEMBANK		= LOADADDR>>16		// 0x40000 >> 16 = 4
 .const TAIL_OFF			= CHARS_WIDE*2
-.const arcadeRowSize		= 6 // offset/0x40
+.const arcadeRowSize	= 6 // offset/0x40
 .const hw_nmi_vec 		= $fffa
 .const hw_irq_vec 		= $fffe
 .const vicii_irqmask 	= $d01a
@@ -73,10 +73,10 @@ byte 1 - character code LSB
 
 // Low-RAM staging buffer for one high-score entry
 
-.const HSRC0  				= $40
-.const HSRC1 				= $41
-.const HSRC2 				= $42
-.const HSRC3 				= $43
+.const HSRC0  				= $50
+.const HSRC1 				= $51
+.const HSRC2 				= $52
+.const HSRC3 				= $53
 
 .const hiscore_row_buf = WORK_RAM2+$120   /* 5550 */
 
