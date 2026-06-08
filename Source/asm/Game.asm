@@ -5335,7 +5335,7 @@ sub_996d:
 locret_9978:
 	rts
 	
-sub_9979: // fix this, caller is probably wrong. check this
+sub_9979:
 	lda A_Register
 
 	cmp WORK_RAM1+$39
@@ -5347,19 +5347,14 @@ sub_9979: // fix this, caller is probably wrong. check this
 	lda #$f0
 	sta B_Register
 	ldy #$0b
-	sta (U_L),y
+	sta (U_L),y			// 0xf0 not being written
 
 
 
 loc_9986:
-	lda A_Register
-	/* ldb word_54CE -- preserve A */
-	pha
-	lda WORK_RAM2+$9e
+	/* ldb word_54CE */
+	lda WORK_RAM2+$9e /* 54ce */
 	sta B_Register
-	pla
-
-	lda B_Register
 	beq loc_998f
 
 	/* cmpa #8 -- compare original A */
@@ -5536,6 +5531,7 @@ loc_99ee:
 
 loc_99f6:
 	/* sta $35,u */
+	lda A_Register
 	ldy #$35
 	sta (U_L),y
 	sta tmp                 /* preserve original A/index */
@@ -6135,7 +6131,7 @@ loc_9caf:
 loc_9cb2:
 	/* lda $D,u */
 	ldy #$0d
-	lda (U_L),y // should be reading 0x20 after 8 passes.
+	lda (U_L),y // should be reading 0x20 after 8 passes, but 20 is not written here. we have 80 instead
 
 	/* adda $B,u */
 	ldy #$0b
@@ -6208,7 +6204,7 @@ Write player sprite frames to sprite ram
 loc_9ccc:
 	/* ldb ,x+ */ /* x = e840 */
 	ldy #$00
-	lda (X_L),y		// should be 0x8 but we get 0x0 ( explains the problem ). X_L is pointing to C4D0 instead of  <dbg>Ma03e :0000A03E:08400040080001400B0002400B400340
+	lda (X_L),y
 	INC16(X_L, X_H)
 
 	/* stb $E,y */
