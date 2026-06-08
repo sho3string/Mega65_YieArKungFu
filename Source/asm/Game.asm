@@ -2820,14 +2820,13 @@ Each sprite entry is 4 bytes
 
 
 sub_8b30:
-
     CLRB()
     // ldu #$5030
     LDU(WORK_RAM1)
     // ldx #$5000
     LDX(SPRITE_RAM1)
     // lda $C1
-    LDA(WORK_RAM1+$191)		// 0x02 on real hardware, Mega65 is 0x00
+    LDA(WORK_RAM1+$191)
     // asra
     ASRA()				// 0x01
     // bcs loc_8B8A
@@ -2853,7 +2852,7 @@ loc_8b3c:
 
     // lda 6,u  (candidate Y)
     ldy #6					
-    lda (U_L),y			// should be 0x020 and its correct
+    lda (U_L),y
 
     // cmpx #$5026 / bcc loc_8b60  (X is offset now)
     cpx #$27	// workaround - applied for the last sprite offset in the title
@@ -5071,7 +5070,7 @@ sub_94cb: // to do
 loc_9621: // to do
 	jmp *
 	
-loc_9684: // to do
+loc_9684: // to do - we are here now.
 	jmp *
 	
 loc_96d8: // to do
@@ -5080,7 +5079,7 @@ loc_96d8: // to do
 loc_9806: // to do
 	jmp *
 	
-loc_98cf: // loc_98cf is executed WORK_RAM2+$92 is 0
+loc_98cf:
 	
 	/* clr $FFE2,u  == clr -$1e,u */
 	CLR_U_NEG($1e)
@@ -5386,8 +5385,6 @@ sub_9992:
 
 	// ldb -$10,u
 	LDB_U_NEG($10)
-    lda B_Register
-	sta B_Register
 	cmp #$01
 	lbne loc_99f6
 
@@ -5443,8 +5440,7 @@ loc_99cb:
 loc_99ce:
 	// ldb -$0F,u
 	LDB_U_NEG($0f)
-	sta B_Register
-
+	
 	// clra
 	lda #$00
 
@@ -5899,7 +5895,6 @@ sub_9c19:
 	beq loc_9c42
 
 	LDB_U_NEG($0f)
-	
 	cmp #$09
 	bcs loc_9c3d
 
@@ -6267,7 +6262,7 @@ sub_9cf0:
 	/* anda #$30 */
 	and #$30
 	sta A_Register
-	bne loc_9d39
+	lbne loc_9d39
 
 	/* cmpb #3 */
 	lda B_Register
@@ -6275,7 +6270,7 @@ sub_9cf0:
 
 	/* 6809 BCC after CMP = B >= 3
 	   6502 native BCS after CMP = B >= 3 */
-	bcs loc_9d39
+	lbcs loc_9d39
 
 	/* ldb word_54CE */
 	lda WORK_RAM2+$9e
@@ -6290,9 +6285,7 @@ sub_9cf0:
 loc_9d13:
 	/* ldb -$10,u */
 	LDB_U_NEG($10)
-
 	/* cmpb #2 */
-	lda B_Register
 	cmp #$02
 	beq loc_9d37
 
@@ -6818,7 +6811,7 @@ loc_9e86:
 	/* std $E,y */
 	ldy #$0e
 	lda A_Register
-	sta (Y_L),y
+	sta (Y_L),y 		/* 0x502e is the write for the sprite code MSB and attribute for arrow below Oolong */
 	iny
 	lda B_Register
 	sta (Y_L),y
@@ -7309,7 +7302,7 @@ loc_9fe2:
 	beq loc_a04d
 
 	lda WORK_RAM2+$94
-	beq loc_a045
+	beq loc_a045		
 
 	cmp #$02
 	BCS(loc_a04d)
@@ -7494,6 +7487,7 @@ loc_a252:
 
 loc_a258:
 	lda WORK_RAM2+$e5      // word_5515
+	sta A_Register
 
 loc_a25b:
 	lda X_L
@@ -7786,11 +7780,11 @@ loc_a339:
 	lda (X_L),y
 
 	LDB_U_NEG($15)		/* $ffeb,u */
-	sta B_Register
 	cmp #$01
-	bne loc_a35b
+	lbne loc_a35b
 
 	lda #$20
+	sta A_Register
 	LDB_U_NEG($07)			/* -7,u */
 	beq loc_a351
 
@@ -7809,7 +7803,6 @@ loc_a351:
 	bne loc_a359
 
 	lda #$10
-
 loc_a359:
 	ldy #$00
 	sec
@@ -7826,7 +7819,6 @@ loc_a35b:
 	bne loc_a36f
 
 	LDB_U_NEG($15)		/* $ffeb,u */
-	sta B_Register
 	cmp #$01
 	beq loc_a36f
 
