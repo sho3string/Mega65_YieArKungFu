@@ -6,7 +6,7 @@
 .const TRANSPARENT 			= $80
 
 // sprite queue variables
-.const SPRITE_MAX			= 27	 									// Maximum # of sprites to queue
+.const SPRITE_MAX			= 24	 									// Maximum # of sprites to queue
 .const PIXIE_MAX			= 180
 
 /*
@@ -37,9 +37,9 @@ byte 1 - character code LSB
 .const ROW_STRIDE		= $40 + (RRB_Tail_words * 2)
 .const COLOR_RAM		= $FF80000 
 //.const LOADADDR		= $40000			// use spare ram to load stuff into.
-.const GRAPHMEM  		= $30000 			// this will be our character generator at bank 2
-.const PLAYFIELD		= $20000			// Playfield data at bank1
-.const HISCORE			= PLAYFIELD + $5c0 // 0x205c0
+.const GRAPHMEM  		= $10000 			// this will be our character generator at bank 2
+.const PLAYFIELD		= GRAPHMEM + $30000	// Playfield data at bank1
+.const HISCORE			= PLAYFIELD + $5c1 	// 0x205c0
 .const TILE_OFFSET		= GRAPHMEM/64
 //.const MEMBANK		= LOADADDR>>16		// 0x40000 >> 16 = 4
 .const TAIL_OFF			= CHARS_WIDE*2
