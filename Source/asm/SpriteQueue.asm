@@ -19,28 +19,90 @@
 .const Q_YSUB		= byte_44 
 .const XHI_TEMP		= byte_45
 .const SORT_I		= byte_46   // choose free zp
-.const KEY_X		= byte_47
-.const Q_XHI		= byte_48
-.const Q_BOT		= byte_49
-.const COLPTR0		= byte_5a
-.const COLPTR1		= byte_5b
-.const COLPTR2		= byte_5c
-.const COLPTR3		= byte_5d
-.const Q_ROW_P1		= byte_5e
-.const Q_ROW_P2		= byte_5f
+/* Sprite ram for fighters 
+
+Oolong
+------
+Bottom Left
+0x5004 - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x5005 - byte 1 - Y pos
+0x5404 - byte 0 - X pos  
+0x5405 - byte 1 - LSB ( character code )
+
+Top Left
+0x5006 - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x5007 - byte 1 - Y pos
+0x5406 - byte 0 - X pos  
+0x5407 - byte 1 - LSB ( character code )
+
+Bottom Right
+0x5008 - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x5009 - byte 1 - Y pos
+0x5408 - byte 0 - X pos  
+0x5409 - byte 1 - LSB ( character code )
+
+Top Right
+0x500a - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x500b - byte 1 - Y pos
+0x540a - byte 0 - X pos  
+0x540b - byte 1 - LSB ( character code )
+
+Nuncha
+------
+Bottom left
+0x500c - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x500d - byte 1 - Y pos
+0x540c - byte 0 - X pos  
+0x540d - byte 1 - LSB ( character code )
+
+Top Left
+0x500e - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x500f - byte 0 - Y pos
+0x540e- byte 0 - X pos  
+0x540f - byte 1 - LSB ( character code )
+
+Bottom Right
+0x5010 - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x5011 - byte 1 - Y pos
+0x5410 - byte 0 - X pos  
+0x5411 - byte 1 - LSB ( character code )
+
+Top Right
+0x5012 - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x5013 - byte 1 - Y pos
+0x5412 - byte 0 - X pos  
+0x5413 - byte 1 - LSB ( character code )
+
+Directional Arror
+-----------------
+0x502e - byte 0 - bit 0 MSB / bit 6 X flip / bit 7Y flip
+0x502f - byte 1 - Y pos
+0x542e - byte 0 - X pos  
+0x542f - byte 1 - LSB ( character code.. C8,C9 or CA )
 
 
-.const FCM_YOFFS_DIR	= $10	// bit4 in raster-hi
-.const SPR_TILE_STRIDE	= 16	// 16 tiles across
-.const SPR_TILE_BASE	= $0200	// Set tilesheet offset to sprite data.
-.const Y_BIAS			= 16
+*/
+
+.const KEY_X	= byte_47
+.const Q_XHI	= byte_48
+.const Q_BOT	= byte_49
+.const COLPTR0	= byte_5a
+.const COLPTR1	= byte_5b
+.const COLPTR2	= byte_5c
+.const COLPTR3	= byte_5d
+.const Q_ROW_P1	= byte_5e
+.const Q_ROW_P2	= byte_5f
+
+
+.const FCM_YOFFS_DIR		= $10		// bit4 in raster-hi
+.const SPR_TILE_STRIDE		= 16		// 16 tiles across
+.const SPR_TILE_BASE		= $0200	// Set tilesheet offset to sprite data.
+.const Y_BIAS				= 16
 
 *=* "Sprite Queue Routines - SpriteQueue.asm"
 
 
 BuildRowListsFromArcadeRAM:
-
-	
     // clear runtime pixie/node state
     lda #0
     sta PixieCount
@@ -276,17 +338,8 @@ RRB_BuildRow:
 	tax                     // X = first pixie in this row
 
 !countWalk:
-
-	lda RowCount
-    cmp RRB_GlobalPeakCount
-    bcc !noGlobalPeak+
-    sta RRB_GlobalPeakCount
-    lda CurrentRow
-    sta RRB_GlobalPeakRow
-!noGlobalPeak:
-
-	lda PixieActive,x
-	beq !countNext+         // optional safety
+	//lda PixieActive,x
+	//beq !countNext+         // optional safety
 
 	inc RRB_NeededThisRow
 	lda RowCount
@@ -302,15 +355,6 @@ RRB_BuildRow:
 
 !noPixies:
 
-	// ---------------------------------------------
-	// calculate peak pixie usage
-	// ---------------------------------------------
-	ldy CurrentRow
-	lda RRB_NeededThisRow
-	cmp RowPeakTable,y
-	bcc !noRowPeak+
-	sta RowPeakTable,y
-!noRowPeak:
 
 	// ---------------------------------------------
 	// emit tail directly from linked list
@@ -1286,8 +1330,6 @@ RRB_NeededThisRow:	.byte 0    // temp for current row
 RowCount:				.byte 0
 PixieCount:			.byte 0
 Q_MEGA_FLP:			.byte 0
-
-RowPeakTable:			.fill CHARS_HIGH, 0 // debugging.
 
 PixieActive:			.fill PIXIE_MAX, 0   // 1=active
 PixieRow:				.fill PIXIE_MAX, 0   // coarse row 0..31
